@@ -217,12 +217,14 @@ func postCommandToWorkspace(workspaceID, execAgentURL string, sampleCommand Comm
 
 func checkCommandExitCode(Pid int, execAgentURL string) ProcessStruct {
 	jsonData := getJSON(execAgentURL + "/" + strconv.Itoa(Pid))
-	//fmt.Printf(execAgentURL + "/process/" + strconv.Itoa(Pid))
-	//fmt.Printf(string(jsonData))
 	var data ProcessStruct
 	jsonErr := json.Unmarshal(jsonData, &data)
 	if jsonErr != nil {
 		log.Fatal(jsonErr)
+	}
+
+	if data.ExitCode > 0 {
+		checkExecStatus(Pid, data.ExitCode, execAgentURL)
 	}
 
 	return data
@@ -231,12 +233,39 @@ func checkCommandExitCode(Pid int, execAgentURL string) ProcessStruct {
 
 func continuouslyCheckCommandExitCode(Pid int, execAgentURL string) {
 	runCommand := checkCommandExitCode(Pid, execAgentURL)
-
+	time.Sleep(1 * time.Minute)
+	checkExecStatus(Pid, runCommand.ExitCode, execAgentURL)
 	for runCommand.Alive == true {
 		time.Sleep(1 * time.Minute)
 		runCommand = checkCommandExitCode(Pid, execAgentURL)
+		checkExecStatus(Pid, runCommand.ExitCode, execAgentURL)
 	}
 
+}
+
+type LogArray []struct {
+	Kind int       `json:"kind"`
+	Time time.Time `json:"time"`
+	Text string    `json:"text"`
+}
+
+func checkExecStatus(Pid, status int, execAgentURL string) {
+	if status > 0 {
+		jsonData := getJSON(execAgentURL + "/" + strconv.Itoa(Pid) + "/logs")
+		var data LogArray
+		jsonErr := json.Unmarshal(jsonData, &data)
+		if jsonErr != nil {
+			log.Fatal(jsonErr)
+		}
+
+		var buffer bytes.Buffer
+		for _, value := range data {
+			buffer.WriteString(value.Text)
+			buffer.WriteString("\n")
+		}
+
+		fmt.Printf(buffer.String())
+	}
 }
 
 func getSamplesJSON(url string) []Sample {
@@ -804,7 +833,7 @@ func stopWorkspace(workspaceID string) error {
 
 func removeWorkspace(workspaceID string) error {
 
-	url := fullyQualifiedEndpoint + "/" + workspaceID
+	url := fullyQualifiedEndpoint + "/workspace/" + workspaceID
 	req, err := http.NewRequest("DELETE", url, bytes.NewBufferString(""))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -869,7 +898,7 @@ func TestMain(m *testing.M) {
 
 	for _, workspace := range allStackData {
 		workspaceStartingResp := triggerStackStart(workspace, workspace.Sample)
-		time.Sleep(20 * time.Second)
+		time.Sleep(30 * time.Second)
 		agents := getExecAgentHTTP(workspaceStartingResp.ID)
 		addSampleToProject(agents.wsAgentURL, workspace.Sample)
 
@@ -877,7 +906,7 @@ func TestMain(m *testing.M) {
 		continuouslyCheckCommandExitCode(Pid, agents.execAgentURL)
 
 		stopWorkspace(workspaceStartingResp.ID)
-		time.Sleep(20 * time.Second)
+		time.Sleep(30 * time.Second)
 		removeWorkspace(workspaceStartingResp.ID)
 	}
 
