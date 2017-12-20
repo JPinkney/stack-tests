@@ -120,16 +120,19 @@ func getJSON(url string) []byte {
 }
 
 type RuntimeStruct struct {
-	Runtime struct {
-		Machines []struct {
-			Runtime struct {
-				Servers map[string]struct {
-					URL string `json:"url"`
-					Ref string `json:"ref"`
-				} `json:"servers"`
-			} `json:"runtime"`
-		} `json:"machines"`
-	} `json:"runtime"`
+	Runtime Machine `json:"runtime"`
+}
+
+type Machine struct {
+	Machines map[string]Servers `json:"machines"`
+}
+
+type Servers struct {
+	Servers map[string]ServerURL `json:"servers"`
+}
+
+type ServerURL struct {
+	URL string `json:"url"`
 }
 
 type Agent struct {
@@ -140,23 +143,29 @@ type Agent struct {
 func getExecAgentHTTP(workspaceID string) Agent {
 	//Now we need to get the workspace installers and then unmarshall
 	runtimeData := getJSON(fullyQualifiedEndpoint + "/workspace/" + workspaceID)
-
+	fmt.Printf(string(runtimeData))
 	var data RuntimeStruct
 	jsonErr := json.Unmarshal(runtimeData, &data)
 	if jsonErr != nil {
 		log.Fatal(jsonErr)
 	}
 
+	fmt.Printf("%v", data)
+
 	var agents Agent
-	for _, machine := range data.Runtime.Machines {
-		for _, installer := range machine.Runtime.Servers {
-			if installer.Ref == "exec-agent" {
+	for key, machine := range data.Runtime.Machines {
+		fmt.Printf("%v", machine)
+		fmt.Printf("%v", data.Runtime.Machines[key])
+		for key2, installer := range data.Runtime.Machines[key].Servers {
+
+			if key2 == "exec-agent/http" {
 				agents.execAgentURL = installer.URL
 			}
 
-			if installer.Ref == "wsagent" {
+			if key2 == "wsagent/http" {
 				agents.wsAgentURL = installer.URL
 			}
+
 		}
 	}
 
@@ -175,12 +184,12 @@ type ProcessStruct struct {
 
 func postCommandToWorkspace(workspaceID, execAgentURL string, sampleCommand Command, samplePath string) int {
 
-	fmt.Printf(execAgentURL)
+	//fmt.Printf(execAgentURL)
 	sampleCommand.CommandLine = strings.Replace(sampleCommand.CommandLine, "${current.project.path}", "/projects"+samplePath, -1)
 	sampleCommand.CommandLine = strings.Replace(sampleCommand.CommandLine, "${GAE}", "/home/user/google_appengine", -1)
 	sampleCommand.CommandLine = strings.Replace(sampleCommand.CommandLine, "$TOMCAT_HOME", "/home/user/tomcat8", -1)
 	marshalled, _ := json.MarshalIndent(sampleCommand, "", "    ")
-	req, err := http.NewRequest("POST", execAgentURL+"/process", bytes.NewBufferString(string(marshalled)))
+	req, err := http.NewRequest("POST", execAgentURL, bytes.NewBufferString(string(marshalled)))
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
@@ -194,7 +203,7 @@ func postCommandToWorkspace(workspaceID, execAgentURL string, sampleCommand Comm
 		panic(err.Error())
 	}
 	var data ProcessStruct
-	fmt.Printf(string(body))
+	//fmt.Printf(string(body))
 	err = json.Unmarshal([]byte(body), &data)
 	if err != nil {
 		panic(err.Error())
@@ -207,9 +216,9 @@ func postCommandToWorkspace(workspaceID, execAgentURL string, sampleCommand Comm
 }
 
 func checkCommandExitCode(Pid int, execAgentURL string) ProcessStruct {
-	jsonData := getJSON(execAgentURL + "/process/" + strconv.Itoa(Pid))
-	fmt.Printf(execAgentURL + "/process/" + strconv.Itoa(Pid))
-	fmt.Printf(string(jsonData))
+	jsonData := getJSON(execAgentURL + "/" + strconv.Itoa(Pid))
+	//fmt.Printf(execAgentURL + "/process/" + strconv.Itoa(Pid))
+	//fmt.Printf(string(jsonData))
 	var data ProcessStruct
 	jsonErr := json.Unmarshal(jsonData, &data)
 	if jsonErr != nil {
@@ -779,6 +788,35 @@ func addSampleToProject(wsAgentURL string, sample interface{}) {
 	defer resp.Body.Close()
 }
 
+func stopWorkspace(workspaceID string) error {
+	url := fullyQualifiedEndpoint + "/workspace/" + workspaceID + "/runtime"
+	req, err := http.NewRequest("DELETE", url, bytes.NewBufferString(""))
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf(err.Error())
+	}
+	resp.Body.Close()
+	return nil
+}
+
+func removeWorkspace(workspaceID string) error {
+
+	url := fullyQualifiedEndpoint + "/" + workspaceID
+	req, err := http.NewRequest("DELETE", url, bytes.NewBufferString(""))
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf(err.Error())
+	}
+	resp.Body.Close()
+	return nil
+}
+
 func TestMain(m *testing.M) {
 	// singleStackTestPtr := flag.Bool("s", false, "Start Tests on a Single Stack (Optional)")
 
@@ -831,12 +869,16 @@ func TestMain(m *testing.M) {
 
 	for _, workspace := range allStackData {
 		workspaceStartingResp := triggerStackStart(workspace, workspace.Sample)
-		time.Sleep(2 * time.Second)
+		time.Sleep(20 * time.Second)
 		agents := getExecAgentHTTP(workspaceStartingResp.ID)
 		addSampleToProject(agents.wsAgentURL, workspace.Sample)
 
 		Pid := postCommandToWorkspace(workspaceStartingResp.ID, agents.execAgentURL, workspace.Command, workspace.SamplePath)
 		continuouslyCheckCommandExitCode(Pid, agents.execAgentURL)
+
+		stopWorkspace(workspaceStartingResp.ID)
+		time.Sleep(20 * time.Second)
+		removeWorkspace(workspaceStartingResp.ID)
 	}
 
 }
