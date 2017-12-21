@@ -143,19 +143,19 @@ type Agent struct {
 func getExecAgentHTTP(workspaceID string) Agent {
 	//Now we need to get the workspace installers and then unmarshall
 	runtimeData := getJSON(fullyQualifiedEndpoint + "/workspace/" + workspaceID)
-	fmt.Printf(string(runtimeData))
+	//fmt.Printf(string(runtimeData))
 	var data RuntimeStruct
 	jsonErr := json.Unmarshal(runtimeData, &data)
 	if jsonErr != nil {
 		log.Fatal(jsonErr)
 	}
 
-	fmt.Printf("%v", data)
+	//fmt.Printf("%v", data)
 
 	var agents Agent
-	for key, machine := range data.Runtime.Machines {
-		fmt.Printf("%v", machine)
-		fmt.Printf("%v", data.Runtime.Machines[key])
+	for key := range data.Runtime.Machines {
+		//fmt.Printf("%v", machine)
+		//fmt.Printf("%v", data.Runtime.Machines[key])
 		for key2, installer := range data.Runtime.Machines[key].Servers {
 
 			if key2 == "exec-agent/http" {
@@ -233,10 +233,10 @@ func checkCommandExitCode(Pid int, execAgentURL string) ProcessStruct {
 
 func continuouslyCheckCommandExitCode(Pid int, execAgentURL string) {
 	runCommand := checkCommandExitCode(Pid, execAgentURL)
-	time.Sleep(1 * time.Minute)
+	time.Sleep(15 * time.Second)
 	checkExecStatus(Pid, runCommand.ExitCode, execAgentURL)
 	for runCommand.Alive == true {
-		time.Sleep(1 * time.Minute)
+		time.Sleep(15 * time.Second)
 		runCommand = checkCommandExitCode(Pid, execAgentURL)
 		checkExecStatus(Pid, runCommand.ExitCode, execAgentURL)
 	}
@@ -671,7 +671,7 @@ func triggerStackStart(workspaceConfiguration WorkspaceSample, sample interface{
 	//fmt.Printf(newStr)
 	defer resp.Body.Close()
 
-	fmt.Printf(string(buf.Bytes()))
+	//fmt.Printf(string(buf.Bytes()))
 
 	var WorkspaceResponse Workspace2
 	json.Unmarshal(buf.Bytes(), &WorkspaceResponse)
@@ -846,6 +846,64 @@ func removeWorkspace(workspaceID string) error {
 	return nil
 }
 
+func getWorkspaceStatusByID(workspaceID string) WorkspaceStatus {
+	client := http.Client{
+		Timeout: time.Second * 2,
+	}
+
+	buf2 := new(bytes.Buffer)
+	url := fullyQualifiedEndpoint + "/workspace/" + workspaceID + "/check"
+	req, err := http.NewRequest(http.MethodGet, url, buf2)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	res, getErr := client.Do(req)
+	if getErr != nil {
+		log.Fatal(getErr)
+	}
+
+	body, readErr := ioutil.ReadAll(res.Body)
+	if readErr != nil {
+		log.Fatal(readErr)
+	}
+
+	var data WorkspaceStatus
+	jsonErr := json.Unmarshal([]byte(body), &data)
+
+	if jsonErr != nil {
+		log.Fatal(jsonErr)
+	}
+
+	return data
+}
+
+func blockWorkspaceUntilStarted(workspaceID string) {
+	workspaceStatus := getWorkspaceStatusByID(workspaceID)
+	for workspaceStatus.WorkspaceStatus == "STARTING" {
+		time.Sleep(30 * time.Second)
+		workspaceStatus = getWorkspaceStatusByID(workspaceID)
+	}
+	time.Sleep(30 * time.Second)
+}
+
+func blockWorkspaceUntilStopped(workspaceID string) error {
+	workspaceStatus := getWorkspaceStatusByID(workspaceID)
+
+	//Workspace hasn't quite shut down due to speed
+	for workspaceStatus.WorkspaceStatus == "SNAPSHOTTING" {
+		time.Sleep(15 * time.Second)
+		workspaceStatus = getWorkspaceStatusByID(workspaceID)
+	}
+
+	time.Sleep(15 * time.Second)
+
+	if workspaceStatus.WorkspaceStatus != "STOPPED" {
+		return fmt.Errorf("Workspace was not stopped")
+	}
+	return nil
+}
+
 func TestMain(m *testing.M) {
 	// singleStackTestPtr := flag.Bool("s", false, "Start Tests on a Single Stack (Optional)")
 
@@ -897,16 +955,21 @@ func TestMain(m *testing.M) {
 	allStackData := testAllStacks("")
 
 	for _, workspace := range allStackData {
+		fmt.Printf("Starting workspace tests for %s\n", workspace.ID)
 		workspaceStartingResp := triggerStackStart(workspace, workspace.Sample)
-		time.Sleep(30 * time.Second)
+		blockWorkspaceUntilStarted(workspaceStartingResp.ID)
 		agents := getExecAgentHTTP(workspaceStartingResp.ID)
+
+		if agents.execAgentURL == "" || agents.wsAgentURL == "" {
+			agents = getExecAgentHTTP(workspaceStartingResp.ID)
+		}
 		addSampleToProject(agents.wsAgentURL, workspace.Sample)
 
 		Pid := postCommandToWorkspace(workspaceStartingResp.ID, agents.execAgentURL, workspace.Command, workspace.SamplePath)
 		continuouslyCheckCommandExitCode(Pid, agents.execAgentURL)
 
 		stopWorkspace(workspaceStartingResp.ID)
-		time.Sleep(30 * time.Second)
+		blockWorkspaceUntilStopped(workspaceStartingResp.ID)
 		removeWorkspace(workspaceStartingResp.ID)
 	}
 
