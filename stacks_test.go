@@ -36,7 +36,7 @@ type WorkspaceSample struct {
 	Config     WorkspaceConfig
 	ID         string
 	Sample     interface{}
-	Command    Command
+	Command    []Command
 	SamplePath string
 }
 
@@ -86,7 +86,7 @@ type SampleSourceType struct {
 }
 
 var rhStackLocation = "https://raw.githubusercontent.com/redhat-developer/rh-che/master/assembly/fabric8-stacks/src/main/resources/stacks.json"
-var eclipseStackLocation = "https://raw.githubusercontent.com/eclipse/che/master/ide/che-core-ide-stacks/src/main/resources/stacks.json"
+var eclipseStackLocation = "http://localhost:8080/api/stack"
 var samples = "https://raw.githubusercontent.com/eclipse/che/master/ide/che-core-ide-templates/src/main/resources/samples.json"
 var tableData runArgsData
 var fullyQualifiedEndpoint = "http://localhost:8080/api"
@@ -96,7 +96,7 @@ var fullyQualifiedEndpoint = "http://localhost:8080/api"
 func getJSON(url string) []byte {
 
 	client := http.Client{
-		Timeout: time.Second * 10,
+		Timeout: time.Second * 60,
 	}
 
 	buf2 := new(bytes.Buffer)
@@ -147,7 +147,7 @@ func getExecAgentHTTP(workspaceID string) Agent {
 	var data RuntimeStruct
 	jsonErr := json.Unmarshal(runtimeData, &data)
 	if jsonErr != nil {
-		log.Fatal(jsonErr)
+		fmt.Printf("%v", jsonErr)
 	}
 
 	//fmt.Printf("%v", data)
@@ -271,7 +271,7 @@ func checkExecStatus(Pid, status int, execAgentURL string) {
 func getSamplesJSON(url string) []Sample {
 
 	client := http.Client{
-		Timeout: time.Second * 10,
+		Timeout: time.Second * 60,
 	}
 
 	buf2 := new(bytes.Buffer)
@@ -329,51 +329,47 @@ func generateExampleTables(stackData []Workspace, samples []Sample, tag string) 
 				}
 
 				if shouldAdd {
-					if !strings.Contains(stackElement.Source.Origin, "centos") {
-						availableCommands := sampleElement.Commands
-						if len(availableCommands) == 0 {
-							availableCommands = stackElement.Command
-						}
+					availableCommands := append(sampleElement.Commands, stackElement.Command...)
 
-						for _, cmd := range availableCommands {
-							//cmdReplace := strings.Replace(cmd.CommandLine, "${current.project.path}", sampleElement.Name, -1)
-							if cmd.Name == "build" {
-								tableElements = append(tableElements, WorkspaceSample{
-									Command:    cmd,
-									Config:     stackElement.Config,
-									ID:         stackElement.ID,
-									Sample:     sampleElement,
-									SamplePath: sampleElement.Path,
-								})
-							}
-						}
-					}
+					//Prepend the build becaues the project has to be built before using other commands
+					commandList := orderCommands(availableCommands)
+					tableElements = append(tableElements, WorkspaceSample{
+						Command:    commandList,
+						Config:     stackElement.Config,
+						ID:         stackElement.ID,
+						Sample:     sampleElement,
+						SamplePath: sampleElement.Path,
+					})
 
 				}
 			} else {
-				if !strings.Contains(stackElement.Source.Origin, "centos") {
-					//It matches because theres nothing to compare it to
-					availableCommands := sampleElement.Commands
-					if len(availableCommands) == 0 {
-						availableCommands = stackElement.Command
-					}
-					for _, cmd := range availableCommands {
-						//cmdReplace := strings.Replace(cmd.CommandLine, "${current.project.path}", sampleElement.Name, -1)
-						if cmd.Name == "build" {
-							tableElements = append(tableElements, WorkspaceSample{
-								Command:    cmd,
-								Config:     stackElement.Config,
-								ID:         stackElement.ID,
-								Sample:     sampleElement,
-								SamplePath: sampleElement.Path,
-							})
-						}
-					}
-				}
+				availableCommands := append(sampleElement.Commands, stackElement.Command...)
+
+				//Prepend the build becaues the project has to be built before using other commands
+				commandList := orderCommands(availableCommands)
+				tableElements = append(tableElements, WorkspaceSample{
+					Command:    commandList,
+					Config:     stackElement.Config,
+					ID:         stackElement.ID,
+					Sample:     sampleElement,
+					SamplePath: sampleElement.Path,
+				})
 			}
 		}
 	}
 	return tableElements
+}
+
+func orderCommands(commands []Command) []Command {
+	var orderedCommands []Command
+	for _, command := range commands {
+		if strings.Contains(command.Name, "build") {
+			orderedCommands = append([]Command{command}, orderedCommands...)
+		} else {
+			orderedCommands = append(orderedCommands, command)
+		}
+	}
+	return orderedCommands
 }
 
 func execWithPiping(runCommandArgsSplit []string) (string, error) {
@@ -626,8 +622,7 @@ type EnvironmentConfig struct {
 
 // WorkspaceStatus helps unmarshal workspace IDs to check if a given workspace is running
 type WorkspaceStatus struct {
-	WorkspaceStatus string `json:"workspaceStatus"`
-	Code            int    `json:"code"`
+	WorkspaceStatus string `json:"status"`
 }
 
 //
@@ -848,11 +843,11 @@ func removeWorkspace(workspaceID string) error {
 
 func getWorkspaceStatusByID(workspaceID string) WorkspaceStatus {
 	client := http.Client{
-		Timeout: time.Second * 2,
+		Timeout: time.Second * 60,
 	}
 
 	buf2 := new(bytes.Buffer)
-	url := fullyQualifiedEndpoint + "/workspace/" + workspaceID + "/check"
+	url := fullyQualifiedEndpoint + "/workspace/" + workspaceID
 	req, err := http.NewRequest(http.MethodGet, url, buf2)
 	if err != nil {
 		log.Fatal(err)
@@ -884,7 +879,6 @@ func blockWorkspaceUntilStarted(workspaceID string) {
 		time.Sleep(30 * time.Second)
 		workspaceStatus = getWorkspaceStatusByID(workspaceID)
 	}
-	time.Sleep(30 * time.Second)
 }
 
 func blockWorkspaceUntilStopped(workspaceID string) error {
@@ -960,13 +954,15 @@ func TestMain(m *testing.M) {
 		blockWorkspaceUntilStarted(workspaceStartingResp.ID)
 		agents := getExecAgentHTTP(workspaceStartingResp.ID)
 
-		if agents.execAgentURL == "" || agents.wsAgentURL == "" {
+		for agents.execAgentURL == "" || agents.wsAgentURL == "" {
 			agents = getExecAgentHTTP(workspaceStartingResp.ID)
 		}
 		addSampleToProject(agents.wsAgentURL, workspace.Sample)
 
-		Pid := postCommandToWorkspace(workspaceStartingResp.ID, agents.execAgentURL, workspace.Command, workspace.SamplePath)
-		continuouslyCheckCommandExitCode(Pid, agents.execAgentURL)
+		for _, cmd := range workspace.Command {
+			Pid := postCommandToWorkspace(workspaceStartingResp.ID, agents.execAgentURL, cmd, workspace.SamplePath)
+			continuouslyCheckCommandExitCode(Pid, agents.execAgentURL)
+		}
 
 		stopWorkspace(workspaceStartingResp.ID)
 		blockWorkspaceUntilStopped(workspaceStartingResp.ID)
