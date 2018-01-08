@@ -1,5 +1,3 @@
-// +build integration
-
 /*
 Copyright (C) 2017 Red Hat, Inc.
 
@@ -16,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package integration
+package main
 
 import (
 	"crypto/tls"
@@ -34,14 +32,11 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"testing"
 
-	"github.com/DATA-DOG/godog"
 	"github.com/DATA-DOG/godog/gherkin"
 	"gopkg.in/yaml.v2"
 
 	"github.com/minishift/minishift/pkg/minikube/constants"
-	testProxy "github.com/minishift/minishift/test/integration/proxy"
 	"github.com/minishift/minishift/test/integration/util"
 )
 
@@ -70,52 +65,52 @@ const (
 	delimiterConst = ";"
 )
 
-func TestMain(m *testing.M) {
-	parseFlags()
+// func TestMain(m *testing.M) {
+// 	parseFlags()
 
-	if godogTags != "" {
-		godogTags += "&&"
-	}
-	runner := util.MinishiftRunner{CommandPath: minishiftBinary}
-	if runner.IsCDK() {
-		godogTags += "~minishift-only"
-		isoName = "rhel"
-		fmt.Println("Test run using CDK binary with RHEL iso.")
-	} else {
-		godogTags += "~cdk-only"
-		isoUrl := os.Getenv("MINISHIFT_ISO_URL")
-		switch isoUrl {
-		case "", "b2d":
-			fmt.Println("Test run using Boot2Docker iso image.")
-			isoName = "b2d"
-		case "minikube":
-			fmt.Println("Test run using Minikube iso image.")
-			isoName = "minikube"
-		case "centos":
-			fmt.Println("Test run using CentOS iso image.")
-			isoName = "centos"
-		default:
-			fmt.Print("Using full path for iso image.")
-			isoName = determineIsoFromFile(isoUrl)
-		}
-	}
+// 	if godogTags != "" {
+// 		godogTags += "&&"
+// 	}
+// 	runner := util.MinishiftRunner{CommandPath: minishiftBinary}
+// 	if runner.IsCDK() {
+// 		godogTags += "~minishift-only"
+// 		isoName = "rhel"
+// 		fmt.Println("Test run using CDK binary with RHEL iso.")
+// 	} else {
+// 		godogTags += "~cdk-only"
+// 		isoUrl := os.Getenv("MINISHIFT_ISO_URL")
+// 		switch isoUrl {
+// 		case "", "b2d":
+// 			fmt.Println("Test run using Boot2Docker iso image.")
+// 			isoName = "b2d"
+// 		case "minikube":
+// 			fmt.Println("Test run using Minikube iso image.")
+// 			isoName = "minikube"
+// 		case "centos":
+// 			fmt.Println("Test run using CentOS iso image.")
+// 			isoName = "centos"
+// 		default:
+// 			fmt.Print("Using full path for iso image.")
+// 			isoName = determineIsoFromFile(isoUrl)
+// 		}
+// 	}
 
-	status := godog.RunWithOptions("minishift", func(s *godog.Suite) {
-		FeatureContext(s)
-	}, godog.Options{
-		Format:              godogFormat,
-		Paths:               strings.Split(godogPaths, ","),
-		Tags:                godogTags,
-		ShowStepDefinitions: godogShowStepDefinitions,
-		StopOnFailure:       godogStopOnFailure,
-		NoColors:            godogNoColors,
-	})
+// 	status := godog.RunWithOptions("minishift", func(s *godog.Suite) {
+// 		FeatureContext(s)
+// 	}, godog.Options{
+// 		Format:              godogFormat,
+// 		Paths:               strings.Split(godogPaths, ","),
+// 		Tags:                godogTags,
+// 		ShowStepDefinitions: godogShowStepDefinitions,
+// 		StopOnFailure:       godogStopOnFailure,
+// 		NoColors:            godogNoColors,
+// 	})
 
-	if st := m.Run(); st > status {
-		status = st
-	}
-	os.Exit(status)
-}
+// 	if st := m.Run(); st > status {
+// 		status = st
+// 	}
+// 	os.Exit(status)
+// }
 
 func parseFlags() {
 	flag.StringVar(&minishiftArgs, "minishift-args", "", "Arguments to pass to minishift")
@@ -152,213 +147,213 @@ func determineIsoFromFile(isoUrl string) string {
 	return isoName
 }
 
-func FeatureContext(s *godog.Suite) {
-	runner := util.MinishiftRunner{
-		CommandArgs: minishiftArgs,
-		CommandPath: minishiftBinary}
+// func FeatureContext(s *godog.Suite) {
+// 	runner := util.MinishiftRunner{
+// 		CommandArgs: minishiftArgs,
+// 		CommandPath: minishiftBinary}
 
-	minishift = &Minishift{runner: runner}
+// 	minishift = &Minishift{runner: runner}
 
-	// steps to execute `minishift` commands
-	s.Step(`^Minishift (?:has|should have) state "(Does Not Exist|Running|Stopped)"$`,
-		minishift.shouldHaveState)
-	s.Step(`^profile (.*) (?:has|should have) state "(Does Not Exist|Running|Stopped)"$`,
-		minishift.profileShouldHaveState)
-	s.Step(`profile (.*) (?:is the|should be the) active profile$`,
-		minishift.isTheActiveProfile)
-	s.Step(`^executing "minishift (.*)"$`,
-		minishift.executingMinishiftCommand)
-	s.Step(`^executing "minishift (.*)" (succeeds|fails)$`,
-		executingMinishiftCommandSucceedsOrFails)
-	s.Step(`^([^"]*) of command "minishift (.*)" (is equal|is not equal) to "(.*)"$`,
-		commandReturnEquals)
-	s.Step(`^([^"]*) of command "minishift (.*)" (contains|does not contain) "(.*)"$`,
-		commandReturnContains)
+// 	// steps to execute `minishift` commands
+// 	s.Step(`^Minishift (?:has|should have) state "(Does Not Exist|Running|Stopped)"$`,
+// 		minishift.shouldHaveState)
+// 	s.Step(`^profile (.*) (?:has|should have) state "(Does Not Exist|Running|Stopped)"$`,
+// 		minishift.profileShouldHaveState)
+// 	s.Step(`profile (.*) (?:is the|should be the) active profile$`,
+// 		minishift.isTheActiveProfile)
+// 	s.Step(`^executing "minishift (.*)"$`,
+// 		minishift.executingMinishiftCommand)
+// 	s.Step(`^executing "minishift (.*)" (succeeds|fails)$`,
+// 		executingMinishiftCommandSucceedsOrFails)
+// 	s.Step(`^([^"]*) of command "minishift (.*)" (is equal|is not equal) to "(.*)"$`,
+// 		commandReturnEquals)
+// 	s.Step(`^([^"]*) of command "minishift (.*)" (contains|does not contain) "(.*)"$`,
+// 		commandReturnContains)
 
-	// steps to execute `oc` commands
-	s.Step(`^executing "oc (.*)" retrying (\d+) times with wait period of (\d+) seconds$`,
-		minishift.executingRetryingTimesWithWaitPeriodOfSeconds)
-	s.Step(`^executing "oc (.*)"$`,
-		minishift.executingOcCommand)
-	s.Step(`^executing "oc (.*)" (succeeds|fails)$`,
-		executingOcCommandSucceedsOrFails)
+// 	// steps to execute `oc` commands
+// 	s.Step(`^executing "oc (.*)" retrying (\d+) times with wait period of (\d+) seconds$`,
+// 		minishift.executingRetryingTimesWithWaitPeriodOfSeconds)
+// 	s.Step(`^executing "oc (.*)"$`,
+// 		minishift.executingOcCommand)
+// 	s.Step(`^executing "oc (.*)" (succeeds|fails)$`,
+// 		executingOcCommandSucceedsOrFails)
 
-	// steps for scenario variables
-	s.Step(`^setting scenario variable "(.*)" to the stdout from executing "oc (.*)"$`,
-		minishift.setVariableExecutingOcCommand)
-	s.Step(`^setting scenario variable "(.*)" to the stdout from executing "minishift (.*)"$`,
-		minishift.setVariableExecutingMinishiftCommand)
-	s.Step(`^scenario variable "(.*)" should not be empty$`,
-		variableShouldNotBeEmpty)
+// 	// steps for scenario variables
+// 	s.Step(`^setting scenario variable "(.*)" to the stdout from executing "oc (.*)"$`,
+// 		minishift.setVariableExecutingOcCommand)
+// 	s.Step(`^setting scenario variable "(.*)" to the stdout from executing "minishift (.*)"$`,
+// 		minishift.setVariableExecutingMinishiftCommand)
+// 	s.Step(`^scenario variable "(.*)" should not be empty$`,
+// 		variableShouldNotBeEmpty)
 
-	// steps for rollout check
-	s.Step(`^services "([^"]*)" rollout successfully$`,
-		minishift.rolloutServicesSuccessfully)
+// 	// steps for rollout check
+// 	s.Step(`^services "([^"]*)" rollout successfully$`,
+// 		minishift.rolloutServicesSuccessfully)
 
-	// steps for proxying
-	s.Step(`^user starts proxy server and sets MINISHIFT_HTTP_PROXY variable$`,
-		testProxy.SetProxy)
-	s.Step(`^user stops proxy server and unsets MINISHIFT_HTTP_PROXY variable$`,
-		testProxy.UnsetProxy)
-	s.Step(`^proxy log should contain "(.*)"$`,
-		proxyLogShouldContain)
-	s.Step(`^proxy log should contain$`,
-		proxyLogShouldContainContent)
+// 	// steps for proxying
+// 	s.Step(`^user starts proxy server and sets MINISHIFT_HTTP_PROXY variable$`,
+// 		testProxy.SetProxy)
+// 	s.Step(`^user stops proxy server and unsets MINISHIFT_HTTP_PROXY variable$`,
+// 		testProxy.UnsetProxy)
+// 	s.Step(`^proxy log should contain "(.*)"$`,
+// 		proxyLogShouldContain)
+// 	s.Step(`^proxy log should contain$`,
+// 		proxyLogShouldContainContent)
 
-	// steps to verify `stdout`, `stderr` and `exitcode` of commands executed
-	s.Step(`^(stdout|stderr|exitcode) should contain "(.*)"$`,
-		commandReturnShouldContain)
-	s.Step(`^(stdout|stderr|exitcode) should not contain "(.*)"$`,
-		commandReturnShouldNotContain)
-	s.Step(`^(stdout|stderr|exitcode) should contain$`,
-		commandReturnShouldContainContent)
-	s.Step(`^(stdout|stderr|exitcode) should not contain$`,
-		commandReturnShouldNotContainContent)
-	s.Step(`^(stdout|stderr|exitcode) should equal "(.*)"$`,
-		commandReturnShouldEqual)
-	s.Step(`^(stdout|stderr|exitcode) should equal$`,
-		commandReturnShouldEqualContent)
-	s.Step(`^(stdout|stderr|exitcode) should be empty$`,
-		commandReturnShouldBeEmpty)
-	s.Step(`^(stdout|stderr|exitcode) should not be empty$`,
-		commandReturnShouldNotBeEmpty)
-	s.Step(`^(stdout|stderr|exitcode) should be valid (.*)$`,
-		shouldBeInValidFormat)
-	// steps for matching stdout, stderr or exitcode with regular expression
-	s.Step(`^(stdout|stderr|exitcode) should match "(.*)"$`,
-		commandReturnShouldMatchRegex)
-	s.Step(`^(stdout|stderr|exitcode) should not match "(.*)"$`,
-		commandReturnShouldNotMatchRegex)
-	s.Step(`^(stdout|stderr|exitcode) should match$`,
-		commandReturnShouldMatchRegexContent)
-	s.Step(`^(stdout|stderr|exitcode) should not match$`,
-		commandReturnShouldNotMatchRegexContent)
+// 	// steps to verify `stdout`, `stderr` and `exitcode` of commands executed
+// 	s.Step(`^(stdout|stderr|exitcode) should contain "(.*)"$`,
+// 		commandReturnShouldContain)
+// 	s.Step(`^(stdout|stderr|exitcode) should not contain "(.*)"$`,
+// 		commandReturnShouldNotContain)
+// 	s.Step(`^(stdout|stderr|exitcode) should contain$`,
+// 		commandReturnShouldContainContent)
+// 	s.Step(`^(stdout|stderr|exitcode) should not contain$`,
+// 		commandReturnShouldNotContainContent)
+// 	s.Step(`^(stdout|stderr|exitcode) should equal "(.*)"$`,
+// 		commandReturnShouldEqual)
+// 	s.Step(`^(stdout|stderr|exitcode) should equal$`,
+// 		commandReturnShouldEqualContent)
+// 	s.Step(`^(stdout|stderr|exitcode) should be empty$`,
+// 		commandReturnShouldBeEmpty)
+// 	s.Step(`^(stdout|stderr|exitcode) should not be empty$`,
+// 		commandReturnShouldNotBeEmpty)
+// 	s.Step(`^(stdout|stderr|exitcode) should be valid (.*)$`,
+// 		shouldBeInValidFormat)
+// 	// steps for matching stdout, stderr or exitcode with regular expression
+// 	s.Step(`^(stdout|stderr|exitcode) should match "(.*)"$`,
+// 		commandReturnShouldMatchRegex)
+// 	s.Step(`^(stdout|stderr|exitcode) should not match "(.*)"$`,
+// 		commandReturnShouldNotMatchRegex)
+// 	s.Step(`^(stdout|stderr|exitcode) should match$`,
+// 		commandReturnShouldMatchRegexContent)
+// 	s.Step(`^(stdout|stderr|exitcode) should not match$`,
+// 		commandReturnShouldNotMatchRegexContent)
 
-	// step for HTTP requests for minishift web console
-	s.Step(`^(body|status code) of HTTP request to "([^"]*)" (?:|at "([^"]*)" )(contains|is equal to) "(.*)"$`,
-		verifyHTTPResponse)
+// 	// step for HTTP requests for minishift web console
+// 	s.Step(`^(body|status code) of HTTP request to "([^"]*)" (?:|at "([^"]*)" )(contains|is equal to) "(.*)"$`,
+// 		verifyHTTPResponse)
 
-	// step for HTTP requests for accessing application
-	s.Step(`^(body|status code) of HTTP request to "([^"]*)" of service "([^"]*)" in namespace "([^"]*)" (contains|is equal to) "(.*)"$`,
-		getRoutingUrlAndVerifyHTTPResponse)
+// 	// step for HTTP requests for accessing application
+// 	s.Step(`^(body|status code) of HTTP request to "([^"]*)" of service "([^"]*)" in namespace "([^"]*)" (contains|is equal to) "(.*)"$`,
+// 		getRoutingUrlAndVerifyHTTPResponse)
 
-	// steps for verifying config file content
-	s.Step(`^(JSON|YAML) config file "(.*)" (contains|does not contain) key "(.*)" with value matching "(.*)"$`,
-		configFileContainsKeyMatchingValue)
-	s.Step(`^(JSON|YAML) config file "(.*)" (has|does not have) key "(.*)"$`,
-		configFileContainsKey)
+// 	// steps for verifying config file content
+// 	s.Step(`^(JSON|YAML) config file "(.*)" (contains|does not contain) key "(.*)" with value matching "(.*)"$`,
+// 		configFileContainsKeyMatchingValue)
+// 	s.Step(`^(JSON|YAML) config file "(.*)" (has|does not have) key "(.*)"$`,
+// 		configFileContainsKey)
 
-	s.Step(`^(stdout|stderr) is (JSON|YAML) which (contains|does not contain) key "(.*)" with value matching "(.*)"$`,
-		stdoutContainsKeyMatchingValue)
-	s.Step(`^(stdout|stderr) is (JSON|YAML) which (has|does not have) key "(.*)"$`,
-		stdoutContainsKey)
+// 	s.Step(`^(stdout|stderr) is (JSON|YAML) which (contains|does not contain) key "(.*)" with value matching "(.*)"$`,
+// 		stdoutContainsKeyMatchingValue)
+// 	s.Step(`^(stdout|stderr) is (JSON|YAML) which (has|does not have) key "(.*)"$`,
+// 		stdoutContainsKey)
 
-	// iso dependent steps
-	s.Step(`^printing Docker daemon configuration to stdout$`,
-		catDockerConfigFile)
+// 	// iso dependent steps
+// 	s.Step(`^printing Docker daemon configuration to stdout$`,
+// 		catDockerConfigFile)
 
-	// steps for download of minishift-addons repository
-	s.Step(`^file from "(.*)" is downloaded into location "(.*)"$`,
-		downloadFileIntoLocation)
+// 	// steps for download of minishift-addons repository
+// 	s.Step(`^file from "(.*)" is downloaded into location "(.*)"$`,
+// 		downloadFileIntoLocation)
 
-	// steps for executing commands in shell
-	s.Step(`^user starts shell instance on host machine$`,
-		startHostShellInstance)
-	s.Step(`^user closes shell instance on host machine$`,
-		util.CloseHostShellInstance)
-	s.Step(`^executing "minishift (.*)" in host shell$`,
-		util.ExecuteMinishiftInHostShell)
-	s.Step(`^executing "minishift (.*)" in host shell (succeeds|fails)$`,
-		util.ExecuteMinishiftInHostShellSucceedsOrFails)
-	s.Step(`^executing "(.*)" in host shell$`,
-		util.ExecuteInHostShell)
-	s.Step(`^executing "(.*)" in host shell (succeeds|fails)$`,
-		util.ExecuteInHostShellSucceedsOrFails)
-	s.Step(`^(stdout|stderr) of host shell (?:should contain|contains) "(.*)"$`,
-		util.HostShellCommandReturnShouldContain)
-	s.Step(`^(stdout|stderr) of host shell (?:should not contain|does not contain) "(.*)"$`,
-		util.HostShellCommandReturnShouldNotContain)
-	s.Step(`^(stdout|stderr) of host shell (?:should contain|contains)$`,
-		util.HostShellCommandReturnShouldContainContent)
-	s.Step(`^(stdout|stderr) of host shell (?:should not contain|does not contain)$`,
-		util.HostShellCommandReturnShouldNotContainContent)
-	s.Step(`^(stdout|stderr) of host shell (?:should equal|equals) "(.*)"$`,
-		util.HostShellCommandReturnShouldEqual)
-	s.Step(`^(stdout|stderr) of host shell (?:should equal|equals)$`,
-		util.HostShellCommandReturnShouldEqualContent)
-	s.Step(`^evaluating stdout of the previous command in host shell$`,
-		util.ExecuteInHostShellLineByLine)
+// 	// steps for executing commands in shell
+// 	s.Step(`^user starts shell instance on host machine$`,
+// 		startHostShellInstance)
+// 	s.Step(`^user closes shell instance on host machine$`,
+// 		util.CloseHostShellInstance)
+// 	s.Step(`^executing "minishift (.*)" in host shell$`,
+// 		util.ExecuteMinishiftInHostShell)
+// 	s.Step(`^executing "minishift (.*)" in host shell (succeeds|fails)$`,
+// 		util.ExecuteMinishiftInHostShellSucceedsOrFails)
+// 	s.Step(`^executing "(.*)" in host shell$`,
+// 		util.ExecuteInHostShell)
+// 	s.Step(`^executing "(.*)" in host shell (succeeds|fails)$`,
+// 		util.ExecuteInHostShellSucceedsOrFails)
+// 	s.Step(`^(stdout|stderr) of host shell (?:should contain|contains) "(.*)"$`,
+// 		util.HostShellCommandReturnShouldContain)
+// 	s.Step(`^(stdout|stderr) of host shell (?:should not contain|does not contain) "(.*)"$`,
+// 		util.HostShellCommandReturnShouldNotContain)
+// 	s.Step(`^(stdout|stderr) of host shell (?:should contain|contains)$`,
+// 		util.HostShellCommandReturnShouldContainContent)
+// 	s.Step(`^(stdout|stderr) of host shell (?:should not contain|does not contain)$`,
+// 		util.HostShellCommandReturnShouldNotContainContent)
+// 	s.Step(`^(stdout|stderr) of host shell (?:should equal|equals) "(.*)"$`,
+// 		util.HostShellCommandReturnShouldEqual)
+// 	s.Step(`^(stdout|stderr) of host shell (?:should equal|equals)$`,
+// 		util.HostShellCommandReturnShouldEqualContent)
+// 	s.Step(`^evaluating stdout of the previous command in host shell$`,
+// 		util.ExecuteInHostShellLineByLine)
 
-	s.BeforeSuite(func() {
-		testDir = setUp()
-		testResultDir = filepath.Join(testDir, "..", "test-results")
-		err := os.MkdirAll(testResultDir, os.ModePerm)
-		if err != nil {
-			fmt.Println("Error creating directory for test results:", err)
-			os.Exit(1)
-		}
+// 	s.BeforeSuite(func() {
+// 		testDir = setUp()
+// 		testResultDir = filepath.Join(testDir, "..", "test-results")
+// 		err := os.MkdirAll(testResultDir, os.ModePerm)
+// 		if err != nil {
+// 			fmt.Println("Error creating directory for test results:", err)
+// 			os.Exit(1)
+// 		}
 
-		err = util.StartLog(testResultDir)
-		if err != nil {
-			fmt.Println("Error starting the log:", err)
-			os.Exit(1)
-		}
+// 		err = util.StartLog(testResultDir)
+// 		if err != nil {
+// 			fmt.Println("Error starting the log:", err)
+// 			os.Exit(1)
+// 		}
 
-		fmt.Println("Running Integration test in:", testDir)
-		fmt.Println("Using binary:", minishiftBinary)
-	})
+// 		fmt.Println("Running Integration test in:", testDir)
+// 		fmt.Println("Using binary:", minishiftBinary)
+// 	})
 
-	s.AfterSuite(func() {
-		util.LogMessage("info", "----- Cleaning Up -----")
-		minishift.runner.EnsureDeleted()
-		err := util.CloseLog()
-		if err != nil {
-			fmt.Println("Error closing the log:", err)
-		}
-	})
+// 	s.AfterSuite(func() {
+// 		util.LogMessage("info", "----- Cleaning Up -----")
+// 		minishift.runner.EnsureDeleted()
+// 		err := util.CloseLog()
+// 		if err != nil {
+// 			fmt.Println("Error closing the log:", err)
+// 		}
+// 	})
 
-	s.BeforeFeature(func(this *gherkin.Feature) {
-		util.LogMessage("info", "----- Preparing for feature -----")
-		if runner.IsCDK() {
-			runner.CDKSetup()
-		} else {
-			runner.RunCommandAndPrintError("addons list")
-		}
+// 	s.BeforeFeature(func(this *gherkin.Feature) {
+// 		util.LogMessage("info", "----- Preparing for feature -----")
+// 		if runner.IsCDK() {
+// 			runner.CDKSetup()
+// 		} else {
+// 			runner.RunCommandAndPrintError("addons list")
+// 		}
 
-		var splittedCommands []string
-		if runBeforeFeature != "" {
-			splittedCommands = strings.Split(runBeforeFeature, delimiterConst)
-			fmt.Println("Running commands:", runBeforeFeature)
-		}
+// 		var splittedCommands []string
+// 		if runBeforeFeature != "" {
+// 			splittedCommands = strings.Split(runBeforeFeature, delimiterConst)
+// 			fmt.Println("Running commands:", runBeforeFeature)
+// 		}
 
-		for index := range splittedCommands {
-			runner.RunCommandAndPrintError(splittedCommands[index])
-		}
+// 		for index := range splittedCommands {
+// 			runner.RunCommandAndPrintError(splittedCommands[index])
+// 		}
 
-		util.LogMessage("info", fmt.Sprintf("----- Feature: %s -----", this.Name))
-	})
+// 		util.LogMessage("info", fmt.Sprintf("----- Feature: %s -----", this.Name))
+// 	})
 
-	s.AfterFeature(func(this *gherkin.Feature) {
-		util.LogMessage("info", "----- Cleaning after feature -----")
-		cleanTestDirConfiguration()
-	})
+// 	s.AfterFeature(func(this *gherkin.Feature) {
+// 		util.LogMessage("info", "----- Cleaning after feature -----")
+// 		cleanTestDirConfiguration()
+// 	})
 
-	s.BeforeScenario(func(this interface{}) {
-		switch this.(type) {
-		case *gherkin.Scenario:
-			scenario := *this.(*gherkin.Scenario)
-			util.LogMessage("info", fmt.Sprintf("----- Scenario: %s -----", scenario.ScenarioDefinition.Name))
-		case *gherkin.ScenarioOutline:
-			scenario := *this.(*gherkin.ScenarioOutline)
-			util.LogMessage("info", fmt.Sprintf("----- Scenario Outline: %s -----", scenario.ScenarioDefinition.Name))
-		}
-	})
+// 	s.BeforeScenario(func(this interface{}) {
+// 		switch this.(type) {
+// 		case *gherkin.Scenario:
+// 			scenario := *this.(*gherkin.Scenario)
+// 			util.LogMessage("info", fmt.Sprintf("----- Scenario: %s -----", scenario.ScenarioDefinition.Name))
+// 		case *gherkin.ScenarioOutline:
+// 			scenario := *this.(*gherkin.ScenarioOutline)
+// 			util.LogMessage("info", fmt.Sprintf("----- Scenario Outline: %s -----", scenario.ScenarioDefinition.Name))
+// 		}
+// 	})
 
-	s.AfterScenario(func(interface{}, error) {
-		testProxy.ResetLog(false)
-	})
+// 	s.AfterScenario(func(interface{}, error) {
+// 		testProxy.ResetLog(false)
+// 	})
 
-}
+// }
 
 func setUp() string {
 	var err error
@@ -776,14 +771,6 @@ func getRoutingUrlAndVerifyHTTPResponse(partOfResponse string, urlRoot string, s
 		return fmt.Errorf("Wrong input format : %s. Input must start with /", urlRoot)
 	}
 	return nil
-}
-
-func proxyLogShouldContain(expected string) error {
-	return util.CompareExpectedWithActualContains(expected, testProxy.GetLog())
-}
-
-func proxyLogShouldContainContent(expected *gherkin.DocString) error {
-	return util.CompareExpectedWithActualContains(expected.Content, testProxy.GetLog())
 }
 
 func catDockerConfigFile() error {

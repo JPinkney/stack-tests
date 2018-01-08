@@ -20,6 +20,10 @@ Feature: Che add-on
     Then workspace start should be successful
     When user runs commands
     Then command should be ran successfully
+    When user stops workspace
+    Then workspace stop should be successful
+    When workspace is removed
+    Then workspace removal should be successful
     
     Examples:
     | stack_name |

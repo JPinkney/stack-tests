@@ -1,5 +1,3 @@
-// +build integration
-
 /*
 Copyright (C) 2017 Red Hat, Inc.
 
@@ -16,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package integration
+package main
 
 import (
 	"errors"
@@ -31,6 +29,7 @@ import (
 var commandOutputs []CommandOutput
 var commandVariables []CommandVariable
 
+// CommandOutput is blah
 type CommandOutput struct {
 	Command  string
 	StdOut   string
@@ -38,11 +37,13 @@ type CommandOutput struct {
 	ExitCode int
 }
 
+// CommandVariable is blah
 type CommandVariable struct {
 	Name  string
 	Value string
 }
 
+// Minishift is blah
 type Minishift struct {
 	mutex  sync.Mutex
 	runner util.MinishiftRunner

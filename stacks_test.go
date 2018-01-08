@@ -1,4 +1,4 @@
-package integration
+package main
 
 import (
 	"bytes"
@@ -19,6 +19,86 @@ import (
 	"github.com/minishift/minishift/test/integration/util"
 )
 
+func tableRowGenerator(cellData Stack) *gherkin.TableRow {
+
+	var newTableCellNode gherkin.Node
+	newTableCellNode.Type = "TableCell"
+
+	var newCell gherkin.TableCell
+	newCell.Node = newTableCellNode
+	newCell.Value = cellData.Name
+
+	var newTableCellNode2 gherkin.Node
+	newTableCellNode2.Type = "TableCell"
+
+	var newCell2 gherkin.TableCell
+	newCell2.Node = newTableCellNode
+	newCell2.Value = cellData.ImageName
+
+	var newTableCellNode3 gherkin.Node
+	newTableCellNode3.Type = "TableCell"
+
+	var newCell3 gherkin.TableCell
+	newCell3.Node = newTableCellNode
+	newCell3.Value = cellData.Cmd
+
+	var newTableCellNode4 gherkin.Node
+	newTableCellNode4.Type = "TableCell"
+
+	var newCell4 gherkin.TableCell
+	newCell4.Node = newTableCellNode
+	newCell4.Value = cellData.ExpectedOutput
+
+	var newTableCellNode5 gherkin.Node
+	newTableCellNode5.Type = "TableCell"
+
+	var newCell5 gherkin.TableCell
+	newCell5.Node = newTableCellNode
+	newCell5.Value = cellData.Sample
+
+	var newCell6 gherkin.TableCell
+	newCell6.Node = newTableCellNode
+	newCell6.Value = cellData.SampleFolderName
+
+	var cells []*gherkin.TableCell
+	cells = append(cells, &newCell, &newCell2, &newCell3, &newCell4, &newCell5, &newCell6)
+
+	var newRow gherkin.TableRow
+	newRow.Node = gherkin.Node{Type: "TableRow"}
+	newRow.Cells = cells[0:]
+
+	return &newRow
+
+}
+
+func tableRowArrayGenerator(cellDataArray []Stack) []*gherkin.TableRow {
+
+	var tableRowArray []*gherkin.TableRow
+
+	for _, tableItem := range cellDataArray {
+
+		newTableRow := tableRowGenerator(tableItem)
+		tableRowArray = append(tableRowArray, newTableRow)
+
+	}
+
+	return tableRowArray
+}
+
+func (runArgsData *runArgsData) setupExamplesData(g *gherkin.Feature) {
+	for _, scenario := range g.ScenarioDefinitions {
+		row := scenario.(*gherkin.ScenarioOutline).Examples[0].TableBody
+		newTableRow := tableRowArrayGenerator(runArgsData.Data)
+		if len(newTableRow) == 1 {
+			row = newTableRow
+		} else {
+			row = append(row, newTableRow...)
+		}
+
+		scenario.(*gherkin.ScenarioOutline).Examples[0].TableBody = row
+	}
+}
+
 // Workspace for finding out the workspace status
 type Workspace struct {
 	ID      string              `json:"id"`
@@ -34,8 +114,12 @@ type Workspace2 struct {
 }
 
 type WorkspaceSample struct {
-	Config     WorkspaceConfig
-	ID         string
+	Config   WorkspaceConfig
+	ID       string
+	Projects []Project
+}
+
+type Project struct {
 	Sample     interface{}
 	Command    []Command
 	SamplePath string
@@ -334,6 +418,10 @@ func generateExampleTables(stackData []Workspace, samples []Sample, tag string) 
 
 					//Prepend the build becaues the project has to be built before using other commands
 					commandList := orderCommands(availableCommands)
+					for _, cmd := commandList {
+						
+
+					}
 					tableElements = append(tableElements, WorkspaceSample{
 						Command:    commandList,
 						Config:     stackElement.Config,
@@ -675,115 +763,8 @@ func triggerStackStart(workspaceConfiguration WorkspaceSample, sample interface{
 	return WorkspaceResponse
 }
 
-func tableRowGenerator(cellData Stack) *gherkin.TableRow {
-
-	var newTableCellNode gherkin.Node
-	newTableCellNode.Type = "TableCell"
-
-	var newCell gherkin.TableCell
-	newCell.Node = newTableCellNode
-	newCell.Value = cellData.Name
-
-	var newTableCellNode2 gherkin.Node
-	newTableCellNode2.Type = "TableCell"
-
-	var newCell2 gherkin.TableCell
-	newCell2.Node = newTableCellNode
-	newCell2.Value = cellData.ImageName
-
-	var newTableCellNode3 gherkin.Node
-	newTableCellNode3.Type = "TableCell"
-
-	var newCell3 gherkin.TableCell
-	newCell3.Node = newTableCellNode
-	newCell3.Value = cellData.Cmd
-
-	var newTableCellNode4 gherkin.Node
-	newTableCellNode4.Type = "TableCell"
-
-	var newCell4 gherkin.TableCell
-	newCell4.Node = newTableCellNode
-	newCell4.Value = cellData.ExpectedOutput
-
-	var newTableCellNode5 gherkin.Node
-	newTableCellNode5.Type = "TableCell"
-
-	var newCell5 gherkin.TableCell
-	newCell5.Node = newTableCellNode
-	newCell5.Value = cellData.Sample
-
-	var newCell6 gherkin.TableCell
-	newCell6.Node = newTableCellNode
-	newCell6.Value = cellData.SampleFolderName
-
-	var cells []*gherkin.TableCell
-	cells = append(cells, &newCell, &newCell2, &newCell3, &newCell4, &newCell5, &newCell6)
-
-	var newRow gherkin.TableRow
-	newRow.Node = gherkin.Node{Type: "TableRow"}
-	newRow.Cells = cells[0:]
-
-	return &newRow
-
-}
-
-func tableRowArrayGenerator(cellDataArray []Stack) []*gherkin.TableRow {
-
-	var tableRowArray []*gherkin.TableRow
-
-	for _, tableItem := range cellDataArray {
-
-		newTableRow := tableRowGenerator(tableItem)
-		tableRowArray = append(tableRowArray, newTableRow)
-
-	}
-
-	return tableRowArray
-}
-
-func (runArgsData *runArgsData) setupExamplesData(g *gherkin.Feature) {
-	for _, scenario := range g.ScenarioDefinitions {
-		row := scenario.(*gherkin.ScenarioOutline).Examples[0].TableBody
-		newTableRow := tableRowArrayGenerator(runArgsData.Data)
-		if len(newTableRow) == 1 {
-			row = newTableRow
-		} else {
-			row = append(row, newTableRow...)
-		}
-
-		scenario.(*gherkin.ScenarioOutline).Examples[0].TableBody = row
-	}
-}
-
 type runArgsData struct {
 	Data []Stack
-}
-
-// func FeatureContext(s *godog.Suite) {
-
-// 	stackFeature := &Stack{}
-
-// 	s.BeforeFeature(tableData.setupExamplesData)
-// 	s.Step(`^we have stack name "([^"]*)" imageName "([^"]*)" cmd "([^"]*)" expectedOutput "([^"]*)" sample "([^"]*)" and sampleFolderName "([^"]*)"$`, stackFeature.weHaveStackNameImageNameCmdExpectedOutputSampleAndSampleFolderName)
-// 	s.Step(`^we check exec of main binary as default user$`, stackFeature.weCheckExecOfMainBinaryAsDefaultUser)
-// 	s.Step(`^stdout should be "([^"]*)"$`, stackFeature.stdoutShouldBe)
-// 	s.Step(`^we check exec of main binary as arbitrary user$`, stackFeature.weCheckExecOfMainBinaryAsArbitraryUser)
-// 	s.Step(`^we check run main binary from bash as default user$`, stackFeature.weCheckRunMainBinaryFromBashAsDefaultUser)
-// 	s.Step(`^we check run main binary from bash as arbitrary user$`, stackFeature.weCheckRunMainBinaryFromBashAsArbitraryUser)
-// 	s.Step(`^we check run commands as default user$`, stackFeature.weCheckRunCommandsAsDefaultUser)
-// 	s.Step(`^we check run commands as arbitrary user$`, stackFeature.weCheckRunCommandsAsArbitraryUser)
-
-// }
-
-func testSingleStack(name, imageName, cmd, expectedOutput, sample string) []Stack {
-	var newSingleStackItem Stack
-	newSingleStackItem.Name = name
-	newSingleStackItem.ImageName = imageName
-	newSingleStackItem.Cmd = cmd
-	newSingleStackItem.Sample = sample
-	newSingleStackItem.ExpectedOutput = expectedOutput
-	goDogTableItemArray := []Stack{newSingleStackItem}
-	return goDogTableItemArray
 }
 
 func testAllStacks(tag string) []WorkspaceSample {
@@ -947,45 +928,45 @@ func TestMain(m *testing.M) {
 	// os.Exit(status)
 	// fmt.Printf("go test -all took %s", elapsed)
 
-	allStackData := testAllStacks("")
+	// allStackData := testAllStacks("")
 
-	for _, workspace := range allStackData {
-		fmt.Printf("Starting workspace tests for %s\n", workspace.ID)
-		workspaceStartingResp := triggerStackStart(workspace, workspace.Sample)
-		blockWorkspaceUntilStarted(workspaceStartingResp.ID)
-		agents := getExecAgentHTTP(workspaceStartingResp.ID)
+	// for _, workspace := range allStackData {
+	// 	fmt.Printf("Starting workspace tests for %s\n", workspace.ID)
+	// 	workspaceStartingResp := triggerStackStart(workspace, workspace.Sample)
+	// 	blockWorkspaceUntilStarted(workspaceStartingResp.ID)
+	// 	agents := getExecAgentHTTP(workspaceStartingResp.ID)
 
-		for agents.execAgentURL == "" || agents.wsAgentURL == "" {
-			agents = getExecAgentHTTP(workspaceStartingResp.ID)
-		}
-		addSampleToProject(agents.wsAgentURL, workspace.Sample)
+	// 	for agents.execAgentURL == "" || agents.wsAgentURL == "" {
+	// 		agents = getExecAgentHTTP(workspaceStartingResp.ID)
+	// 	}
+	// 	addSampleToProject(agents.wsAgentURL, workspace.Sample)
 
-		for _, cmd := range workspace.Command {
-			Pid := postCommandToWorkspace(workspaceStartingResp.ID, agents.execAgentURL, cmd, workspace.SamplePath)
-			continuouslyCheckCommandExitCode(Pid, agents.execAgentURL)
-		}
+	// 	for _, cmd := range workspace.Command {
+	// 		Pid := postCommandToWorkspace(workspaceStartingResp.ID, agents.execAgentURL, cmd, workspace.SamplePath)
+	// 		continuouslyCheckCommandExitCode(Pid, agents.execAgentURL)
+	// 	}
 
-		stopWorkspace(workspaceStartingResp.ID)
-		blockWorkspaceUntilStopped(workspaceStartingResp.ID)
-		removeWorkspace(workspaceStartingResp.ID)
-	}
+	// 	stopWorkspace(workspaceStartingResp.ID)
+	// 	blockWorkspaceUntilStopped(workspaceStartingResp.ID)
+	// 	removeWorkspace(workspaceStartingResp.ID)
+	// }
 
 }
 
-func executingSucceeds(addon_install string) error {
-	return succeedsOrFails(addon_install, "succeeds")
+func (m *Minishift) executingSucceeds(addonInstall string) error {
+	return minishift.executingMinishiftCommand(addonInstall)
 }
 
-func stdoutShouldContain(addon_install_resp string) error {
-	return commandReturnShouldContain(addon_install_resp, addon_install_resp)
+func stdoutShouldContain(addonInstallResp string) error {
+	return commandReturnShouldContain(addonInstallResp, addonInstallResp)
 }
 
-func minishiftHasState(arg1 string) error {
-	return godog.ErrPending
+func (m *Minishift) minishiftHasState(runningState string) error {
+	return m.shouldHaveState(runningState)
 }
 
-func minishiftShouldHaveState(arg1 string) error {
-	return godog.ErrPending
+func (m *Minishift) minishiftShouldHaveState(runningState string) error {
+	return m.shouldHaveState(runningState)
 }
 
 func startingAWorkspaceWithStackSucceeds(arg1 string) error {
@@ -1012,10 +993,10 @@ func FeatureContext(s *godog.Suite) {
 
 	minishift = &Minishift{runner: runner}
 
-	s.Step(`^executing "([^"]*)" succeeds$`, executingSucceeds)
+	s.Step(`^executing "([^"]*)" succeeds$`, minishift.executingSucceeds)
 	s.Step(`^stdout should contain "([^"]*)"$`, stdoutShouldContain)
-	s.Step(`^Minishift has state "([^"]*)"$`, minishiftHasState)
-	s.Step(`^Minishift should have state "([^"]*)"$`, minishiftShouldHaveState)
+	s.Step(`^Minishift has state "([^"]*)"$`, minishift.minishiftHasState)
+	s.Step(`^Minishift should have state "([^"]*)"$`, minishift.minishiftShouldHaveState)
 	s.Step(`^stdout should contain$`, stdoutShouldContain)
 	s.Step(`^starting a workspace with stack "([^"]*)" succeeds$`, startingAWorkspaceWithStackSucceeds)
 	s.Step(`^workspace start should be successful$`, workspaceStartShouldBeSuccessful)
