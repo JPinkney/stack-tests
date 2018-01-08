@@ -1,50 +1,33 @@
-# file: $GOPATH/src/godogs/features/godogs.feature
-Feature: Stack Tests
+@addon-che @addon
+Feature: Che add-on
+  Che addon starts Eclipse Che
 
-  Scenario Outline: Check exec of main binary as default user
-    Given we have stack name "<name>" imageName "<imageName>" cmd "<cmd>" expectedOutput "<expectedOutput>" sample "<sample>" and sampleFolderName "<sampleFolderName>"
-    When we check exec of main binary as default user
-    Then stdout should be "<expectedOutput>"
-  Examples:
-    |     name          |                 imageName                              | cmd                                                    | expectedOutput        | sample                                                 | sampleFolderName     |
-    |  blank-default    |  registry.devshift.net/che/ubuntu_jdk8                 | svn --version                                          | 1.9.3                 | https://github.com/che-samples/console-java-simple.git | console-java-simple  |
+  Background: Given Minishift-addons repository is cloned
 
-  Scenario Outline: Check exec of main binary as arbitrary user
-    Given we have stack name "<name>" imageName "<imageName>" cmd "<cmd>" expectedOutput "<expectedOutput>" sample "<sample>" and sampleFolderName "<sampleFolderName>"
-    When we check exec of main binary as arbitrary user
-    Then stdout should be "<expectedOutput>"
-  Examples:
-    |     name          |                 imageName                              | cmd                                                    | expectedOutput        | sample                                                 | sampleFoldername     |
-    |  blank-default    |  registry.devshift.net/che/ubuntu_jdk8                 | svn --version                                          | 1.9.3                 | https://github.com/che-samples/console-java-simple.git | console-java-simple  |
+  Scenario: User enables the che add-on
+    When executing "minishift addons enable che" succeeds
+    Then stdout should contain "Add-on 'che' enabled"
   
-  Scenario Outline: Check run main binary from bash as default user
-    Given we have stack name "<name>" imageName "<imageName>" cmd "<cmd>" expectedOutput "<expectedOutput>" sample "<sample>" and sampleFolderName "<sampleFolderName>"
-    When we check run main binary from bash as default user
-    Then stdout should be "<expectedOutput>"
-  Examples:
-    |     name          |                 imageName                              | cmd                                                    | expectedOutput        | sample                                                 | sampleFoldername     |
-    |  blank-default    |  registry.devshift.net/che/ubuntu_jdk8                 | svn --version                                          | 1.9.3                 | https://github.com/che-samples/console-java-simple.git | console-java-simple  |
-
-  Scenario Outline: Check run main binary from bash as arbitrary user
-    Given we have stack name "<name>" imageName "<imageName>" cmd "<cmd>" expectedOutput "<expectedOutput>" sample "<sample>" and sampleFolderName "<sampleFolderName>"
-    When we check run main binary from bash as arbitrary user
-    Then stdout should be "<expectedOutput>" 
-  Examples:
-    |     name          |                 imageName                              | cmd                                                    | expectedOutput        | sample                                                 | sampleFoldername     |
-    |  blank-default    |  registry.devshift.net/che/ubuntu_jdk8                 | svn --version                                          | 1.9.3                 | https://github.com/che-samples/console-java-simple.git | console-java-simple  |
-
-  Scenario Outline: Check run commands as default user
-    Given we have stack name "<name>" imageName "<imageName>" cmd "<cmd>" expectedOutput "<expectedOutput>" sample "<sample>" and sampleFolderName "<sampleFolderName>"
-    When we check run commands as default user
-    Then stdout should be "<expectedOutput>"
-  Examples:
-    |     name          |                 imageName                              | cmd                                                    | expectedOutput        | sample                                                 | sampleFoldername     |
-    |  blank-default    |  registry.devshift.net/che/ubuntu_jdk8                 | svn --version                                          | 1.9.3                 | https://github.com/che-samples/console-java-simple.git | console-java-simple  |
+  Scenario: User starts Minishift
+    Given Minishift has state "Does Not Exist"
+    When executing "minishift start --memory 4GB" succeeds
+    Then Minishift should have state "Running"
+    And stdout should contain "Che installed"
   
-  Scenario Outline: Check run commands as arbitrary user
-    Given we have stack name "<name>" imageName "<imageName>" cmd "<cmd>" expectedOutput "<expectedOutput>" sample "<sample>" and sampleFolderName "<sampleFolderName>"
-    When we check run commands as arbitrary user
-    Then stdout should be "<expectedOutput>"
-  Examples:
-    |     name          |                 imageName                              | cmd                                                    | expectedOutput        | sample                                                 | sampleFoldername     |
-    |  blank-default    |  registry.devshift.net/che/ubuntu_jdk8                 | svn --version                                          | 1.9.3                 | https://github.com/che-samples/console-java-simple.git | console-java-simple  | 
+  Scenario Outline: User starts workspace, imports projects, checks run commands
+    Given Minishift has state "Running"
+    When starting a workspace with stack "<stack_name>" succeeds
+    Then workspace start should be successful
+    When user runs commands
+    Then command should be ran successfully
+    
+    Examples:
+    | stack_name |
+    | test       |
+  
+  Scenario: User stops and deletes the Minishift instance
+    Given Minishift has state "Running"
+     When executing "minishift stop" succeeds
+     Then Minishift should have state "Stopped"
+     When executing "minishift delete --force" succeeds
+     Then Minishift should have state "Does Not Exist"

@@ -1,4 +1,4 @@
-package main
+package integration
 
 import (
 	"bytes"
@@ -16,6 +16,7 @@ import (
 
 	"github.com/DATA-DOG/godog"
 	"github.com/DATA-DOG/godog/gherkin"
+	"github.com/minishift/minishift/test/integration/util"
 )
 
 // Workspace for finding out the workspace status
@@ -758,21 +759,21 @@ type runArgsData struct {
 	Data []Stack
 }
 
-func FeatureContext(s *godog.Suite) {
+// func FeatureContext(s *godog.Suite) {
 
-	stackFeature := &Stack{}
+// 	stackFeature := &Stack{}
 
-	s.BeforeFeature(tableData.setupExamplesData)
-	s.Step(`^we have stack name "([^"]*)" imageName "([^"]*)" cmd "([^"]*)" expectedOutput "([^"]*)" sample "([^"]*)" and sampleFolderName "([^"]*)"$`, stackFeature.weHaveStackNameImageNameCmdExpectedOutputSampleAndSampleFolderName)
-	s.Step(`^we check exec of main binary as default user$`, stackFeature.weCheckExecOfMainBinaryAsDefaultUser)
-	s.Step(`^stdout should be "([^"]*)"$`, stackFeature.stdoutShouldBe)
-	s.Step(`^we check exec of main binary as arbitrary user$`, stackFeature.weCheckExecOfMainBinaryAsArbitraryUser)
-	s.Step(`^we check run main binary from bash as default user$`, stackFeature.weCheckRunMainBinaryFromBashAsDefaultUser)
-	s.Step(`^we check run main binary from bash as arbitrary user$`, stackFeature.weCheckRunMainBinaryFromBashAsArbitraryUser)
-	s.Step(`^we check run commands as default user$`, stackFeature.weCheckRunCommandsAsDefaultUser)
-	s.Step(`^we check run commands as arbitrary user$`, stackFeature.weCheckRunCommandsAsArbitraryUser)
+// 	s.BeforeFeature(tableData.setupExamplesData)
+// 	s.Step(`^we have stack name "([^"]*)" imageName "([^"]*)" cmd "([^"]*)" expectedOutput "([^"]*)" sample "([^"]*)" and sampleFolderName "([^"]*)"$`, stackFeature.weHaveStackNameImageNameCmdExpectedOutputSampleAndSampleFolderName)
+// 	s.Step(`^we check exec of main binary as default user$`, stackFeature.weCheckExecOfMainBinaryAsDefaultUser)
+// 	s.Step(`^stdout should be "([^"]*)"$`, stackFeature.stdoutShouldBe)
+// 	s.Step(`^we check exec of main binary as arbitrary user$`, stackFeature.weCheckExecOfMainBinaryAsArbitraryUser)
+// 	s.Step(`^we check run main binary from bash as default user$`, stackFeature.weCheckRunMainBinaryFromBashAsDefaultUser)
+// 	s.Step(`^we check run main binary from bash as arbitrary user$`, stackFeature.weCheckRunMainBinaryFromBashAsArbitraryUser)
+// 	s.Step(`^we check run commands as default user$`, stackFeature.weCheckRunCommandsAsDefaultUser)
+// 	s.Step(`^we check run commands as arbitrary user$`, stackFeature.weCheckRunCommandsAsArbitraryUser)
 
-}
+// }
 
 func testSingleStack(name, imageName, cmd, expectedOutput, sample string) []Stack {
 	var newSingleStackItem Stack
@@ -969,4 +970,55 @@ func TestMain(m *testing.M) {
 		removeWorkspace(workspaceStartingResp.ID)
 	}
 
+}
+
+func executingSucceeds(addon_install string) error {
+	return succeedsOrFails(addon_install, "succeeds")
+}
+
+func stdoutShouldContain(addon_install_resp string) error {
+	return commandReturnShouldContain(addon_install_resp, addon_install_resp)
+}
+
+func minishiftHasState(arg1 string) error {
+	return godog.ErrPending
+}
+
+func minishiftShouldHaveState(arg1 string) error {
+	return godog.ErrPending
+}
+
+func startingAWorkspaceWithStackSucceeds(arg1 string) error {
+	return godog.ErrPending
+}
+
+func workspaceStartShouldBeSuccessful() error {
+	return godog.ErrPending
+}
+
+func userRunsCommands() error {
+	return godog.ErrPending
+}
+
+func commandShouldBeRanSuccessfully() error {
+	return godog.ErrPending
+}
+
+func FeatureContext(s *godog.Suite) {
+
+	runner := util.MinishiftRunner{
+		CommandArgs: minishiftArgs,
+		CommandPath: minishiftBinary}
+
+	minishift = &Minishift{runner: runner}
+
+	s.Step(`^executing "([^"]*)" succeeds$`, executingSucceeds)
+	s.Step(`^stdout should contain "([^"]*)"$`, stdoutShouldContain)
+	s.Step(`^Minishift has state "([^"]*)"$`, minishiftHasState)
+	s.Step(`^Minishift should have state "([^"]*)"$`, minishiftShouldHaveState)
+	s.Step(`^stdout should contain$`, stdoutShouldContain)
+	s.Step(`^starting a workspace with stack "([^"]*)" succeeds$`, startingAWorkspaceWithStackSucceeds)
+	s.Step(`^workspace start should be successful$`, workspaceStartShouldBeSuccessful)
+	s.Step(`^user runs commands$`, userRunsCommands)
+	s.Step(`^command should be ran successfully$`, commandShouldBeRanSuccessfully)
 }

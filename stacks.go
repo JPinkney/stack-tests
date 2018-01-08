@@ -1,5 +1,5 @@
-package main
+package integration
 
-func main(){
-	
+func main() {
+
 }
