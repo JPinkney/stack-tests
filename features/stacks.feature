@@ -15,10 +15,8 @@ Feature: Che add-on
     And stdout should contain "Che installed"
   
   Scenario Outline: User starts workspace, imports projects, checks run commands
-    Given Minishift has state "Running"
-    When starting a workspace with stack "<stack_name>" succeeds
-    Then workspace start should be successful
-    When user runs commands
+    Given Minishift has state "Running" and starting a workspace with stack "<stack>" path "<path>" and command "<command>" succeeds
+    When user runs command "<command>" on path "<path>"
     Then command should be ran successfully
     When user stops workspace
     Then workspace stop should be successful
@@ -26,8 +24,8 @@ Feature: Che add-on
     Then workspace removal should be successful
     
     Examples:
-    | stack_name |
-    | test       |
+    | stack      | path | command |
+    |            |      |         |
   
   Scenario: User stops and deletes the Minishift instance
     Given Minishift has state "Running"

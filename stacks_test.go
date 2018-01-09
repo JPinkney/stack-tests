@@ -11,7 +11,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/DATA-DOG/godog"
@@ -19,21 +18,21 @@ import (
 	"github.com/minishift/minishift/test/integration/util"
 )
 
-func tableRowGenerator(cellData Stack) *gherkin.TableRow {
+func tableRowGenerator(cellData WorkspaceTableItem) *gherkin.TableRow {
 
 	var newTableCellNode gherkin.Node
 	newTableCellNode.Type = "TableCell"
 
 	var newCell gherkin.TableCell
 	newCell.Node = newTableCellNode
-	newCell.Value = cellData.Name
+	newCell.Value = cellData.Stack
 
 	var newTableCellNode2 gherkin.Node
 	newTableCellNode2.Type = "TableCell"
 
 	var newCell2 gherkin.TableCell
 	newCell2.Node = newTableCellNode
-	newCell2.Value = cellData.ImageName
+	newCell2.Value = cellData.ProjectName
 
 	var newTableCellNode3 gherkin.Node
 	newTableCellNode3.Type = "TableCell"
@@ -42,26 +41,8 @@ func tableRowGenerator(cellData Stack) *gherkin.TableRow {
 	newCell3.Node = newTableCellNode
 	newCell3.Value = cellData.Cmd
 
-	var newTableCellNode4 gherkin.Node
-	newTableCellNode4.Type = "TableCell"
-
-	var newCell4 gherkin.TableCell
-	newCell4.Node = newTableCellNode
-	newCell4.Value = cellData.ExpectedOutput
-
-	var newTableCellNode5 gherkin.Node
-	newTableCellNode5.Type = "TableCell"
-
-	var newCell5 gherkin.TableCell
-	newCell5.Node = newTableCellNode
-	newCell5.Value = cellData.Sample
-
-	var newCell6 gherkin.TableCell
-	newCell6.Node = newTableCellNode
-	newCell6.Value = cellData.SampleFolderName
-
 	var cells []*gherkin.TableCell
-	cells = append(cells, &newCell, &newCell2, &newCell3, &newCell4, &newCell5, &newCell6)
+	cells = append(cells, &newCell, &newCell2, &newCell3)
 
 	var newRow gherkin.TableRow
 	newRow.Node = gherkin.Node{Type: "TableRow"}
@@ -71,7 +52,7 @@ func tableRowGenerator(cellData Stack) *gherkin.TableRow {
 
 }
 
-func tableRowArrayGenerator(cellDataArray []Stack) []*gherkin.TableRow {
+func tableRowArrayGenerator(cellDataArray []WorkspaceTableItem) []*gherkin.TableRow {
 
 	var tableRowArray []*gherkin.TableRow
 
@@ -85,17 +66,14 @@ func tableRowArrayGenerator(cellDataArray []Stack) []*gherkin.TableRow {
 	return tableRowArray
 }
 
-func (runArgsData *runArgsData) setupExamplesData(g *gherkin.Feature) {
+func setupExamplesData(g *gherkin.Feature) {
+	WorkspaceTableItemArray, stackConfigInfo := testAllStacks("")
+	StackConfigMap = stackConfigInfo
 	for _, scenario := range g.ScenarioDefinitions {
 		row := scenario.(*gherkin.ScenarioOutline).Examples[0].TableBody
-		newTableRow := tableRowArrayGenerator(runArgsData.Data)
-		if len(newTableRow) == 1 {
-			row = newTableRow
-		} else {
-			row = append(row, newTableRow...)
-		}
+		newTableRow := tableRowArrayGenerator(WorkspaceTableItemArray)
 
-		scenario.(*gherkin.ScenarioOutline).Examples[0].TableBody = row
+		scenario.(*gherkin.ScenarioOutline).Examples[0].TableBody = newTableRow
 	}
 }
 
@@ -113,13 +91,19 @@ type Workspace2 struct {
 	ID string `json:"id"`
 }
 
-type WorkspaceSample struct {
-	Config   WorkspaceConfig
-	ID       string
-	Projects []Project
+type StackConfigInfo struct {
+	Config               WorkspaceConfig
+	Projects             []Project
+	WorkspaceSampleArray []WorkspaceSample
 }
 
 type Project struct {
+	Sample interface{}
+}
+
+type WorkspaceSample struct {
+	Config     WorkspaceConfig
+	ID         string
 	Sample     interface{}
 	Command    []Command
 	SamplePath string
@@ -175,6 +159,7 @@ var eclipseStackLocation = "http://localhost:8080/api/stack"
 var samples = "https://raw.githubusercontent.com/eclipse/che/master/ide/che-core-ide-templates/src/main/resources/samples.json"
 var tableData runArgsData
 var fullyQualifiedEndpoint = "http://localhost:8080/api"
+var StackConfigMap map[string]StackConfigInfo
 
 // getJSON gets the json from URL and returns it
 // To use the JSON you need to UnMarshall the response into your object
@@ -225,19 +210,19 @@ type Agent struct {
 	wsAgentURL   string
 }
 
-func getExecAgentHTTP(workspaceID string) Agent {
+func getExecAgentHTTP(workspaceID string) (Agent, error) {
+	var agents Agent
+
 	//Now we need to get the workspace installers and then unmarshall
 	runtimeData := getJSON(fullyQualifiedEndpoint + "/workspace/" + workspaceID)
+
 	//fmt.Printf(string(runtimeData))
 	var data RuntimeStruct
 	jsonErr := json.Unmarshal(runtimeData, &data)
 	if jsonErr != nil {
-		fmt.Printf("%v", jsonErr)
+		return agents, fmt.Errorf("Could not unmrshall data into RuntimeStruct: %v", jsonErr)
 	}
 
-	//fmt.Printf("%v", data)
-
-	var agents Agent
 	for key := range data.Runtime.Machines {
 		//fmt.Printf("%v", machine)
 		//fmt.Printf("%v", data.Runtime.Machines[key])
@@ -254,7 +239,7 @@ func getExecAgentHTTP(workspaceID string) Agent {
 		}
 	}
 
-	return agents
+	return agents, nil
 }
 
 type ProcessStruct struct {
@@ -316,7 +301,7 @@ func checkCommandExitCode(Pid int, execAgentURL string) ProcessStruct {
 
 }
 
-func continuouslyCheckCommandExitCode(Pid int, execAgentURL string) {
+func (stackRuntimeInfo *stackTestRuntimeInfo) continuouslyCheckCommandExitCode(Pid int, execAgentURL string) error {
 	runCommand := checkCommandExitCode(Pid, execAgentURL)
 	time.Sleep(15 * time.Second)
 	checkExecStatus(Pid, runCommand.ExitCode, execAgentURL)
@@ -326,6 +311,9 @@ func continuouslyCheckCommandExitCode(Pid int, execAgentURL string) {
 		checkExecStatus(Pid, runCommand.ExitCode, execAgentURL)
 	}
 
+	stackRuntimeInfo.CommandExitCode = runCommand.ExitCode
+
+	return nil
 }
 
 type LogArray []struct {
@@ -351,6 +339,7 @@ func checkExecStatus(Pid, status int, execAgentURL string) {
 
 		fmt.Printf(buffer.String())
 	}
+
 }
 
 func getSamplesJSON(url string) []Sample {
@@ -386,20 +375,18 @@ func getSamplesJSON(url string) []Sample {
 
 }
 
-type Stack struct {
-	Name             string
-	ImageName        string
-	Sample           string
-	Cmd              string
-	ExpectedOutput   string
-	Output           string
-	SampleFolderName string
+type WorkspaceTableItem struct {
+	Stack       string
+	ProjectName string
+	Cmd         string
 }
 
-func generateExampleTables(stackData []Workspace, samples []Sample, tag string) []WorkspaceSample {
-	var tableElements []WorkspaceSample
-
+func generateExampleTables(stackData []Workspace, samples []Sample, tag string) ([]WorkspaceTableItem, map[string]StackConfigInfo) {
+	var tableElements []WorkspaceTableItem
+	var stackConfigInfo map[string]StackConfigInfo
 	for _, stackElement := range stackData {
+		var samplesForStack []Project
+		var workspaceSampleElements []WorkspaceSample
 		for _, sampleElement := range samples {
 			if len(sampleElement.Tags) != 0 {
 				shouldAdd := false //Just in case two tags inside the same stack/sample element combo are the same
@@ -418,11 +405,17 @@ func generateExampleTables(stackData []Workspace, samples []Sample, tag string) 
 
 					//Prepend the build becaues the project has to be built before using other commands
 					commandList := orderCommands(availableCommands)
-					for _, cmd := commandList {
-						
+					for _, cmd := range commandList {
+
+						tableElements = append(tableElements, WorkspaceTableItem{
+							Stack:       stackElement.ID,
+							ProjectName: sampleElement.Path,
+							Cmd:         cmd.CommandLine,
+						})
 
 					}
-					tableElements = append(tableElements, WorkspaceSample{
+
+					workspaceSampleElements = append(workspaceSampleElements, WorkspaceSample{
 						Command:    commandList,
 						Config:     stackElement.Config,
 						ID:         stackElement.ID,
@@ -436,7 +429,17 @@ func generateExampleTables(stackData []Workspace, samples []Sample, tag string) 
 
 				//Prepend the build becaues the project has to be built before using other commands
 				commandList := orderCommands(availableCommands)
-				tableElements = append(tableElements, WorkspaceSample{
+				for _, cmd := range commandList {
+
+					tableElements = append(tableElements, WorkspaceTableItem{
+						Stack:       stackElement.ID,
+						ProjectName: sampleElement.Path,
+						Cmd:         cmd.CommandLine,
+					})
+
+				}
+
+				workspaceSampleElements = append(workspaceSampleElements, WorkspaceSample{
 					Command:    commandList,
 					Config:     stackElement.Config,
 					ID:         stackElement.ID,
@@ -444,9 +447,16 @@ func generateExampleTables(stackData []Workspace, samples []Sample, tag string) 
 					SamplePath: sampleElement.Path,
 				})
 			}
+
+			samplesForStack = append(samplesForStack, Project{})
+
+		}
+		stackConfigInfo[stackElement.ID] = StackConfigInfo{
+			Config:               stackElement.Config,
+			WorkspaceSampleArray: workspaceSampleElements,
 		}
 	}
-	return tableElements
+	return tableElements, stackConfigInfo
 }
 
 func orderCommands(commands []Command) []Command {
@@ -475,220 +485,6 @@ func execWithPiping(runCommandArgsSplit []string) (string, error) {
 	return stdout.String(), nil
 }
 
-func (stack *Stack) weCheckRunCommandsAsDefaultUser() error {
-
-	stack.stopDockerContainer() //Stop the container just in case its running
-
-	runCommand := "docker run -i --rm --name " + stack.Name + " -v /tmp/" + stack.Name + ":/projects/" + stack.Name + "/ " + stack.ImageName + " sh -c"
-	runCommandSplitWithoutNode := strings.Split(runCommand, " ")
-
-	cmdReplacer := strings.Replace(stack.Cmd, "${current.project.path}", stack.Sample, -1)
-	cmdReplacer = strings.Replace(cmdReplacer, "${GAE}", "/home/user/google_appengine", -1)
-	cmdReplacer = strings.Replace(cmdReplacer, "$TOMCAT_HOME", "/home/user/tomcat8", -1)
-
-	runCommandSplitWithNode := append(runCommandSplitWithoutNode, strings.Split(cmdReplacer, " ")...)
-	stdout, err := execWithPiping(runCommandSplitWithNode)
-	if err != nil {
-		return fmt.Errorf("Docker run has failed: %s", err)
-	}
-
-	stack.ExpectedOutput = stdout
-
-	stack.stopDockerContainer() //Stop the container just in case its running
-
-	return nil
-}
-
-func (stack *Stack) weCheckRunCommandsAsArbitraryUser() error {
-
-	stack.stopDockerContainer() //Stop the container just in case its running
-
-	runCommand := "docker run -i --rm --name " + stack.Name + " --user 15151515 -v /tmp/" + stack.Name + ":/projects/" + stack.Name + "/ " + stack.ImageName + " sh -c"
-	runCommandSplitWithoutNode := strings.Split(runCommand, " ")
-
-	cmdReplacer := strings.Replace(stack.Cmd, "${current.project.path}", stack.Sample, -1)
-	cmdReplacer = strings.Replace(cmdReplacer, "${GAE}", "/home/user/google_appengine", -1)
-	cmdReplacer = strings.Replace(cmdReplacer, "$TOMCAT_HOME", "/home/user/tomcat8", -1)
-
-	runCommandSplitWithNode := append(runCommandSplitWithoutNode, strings.Split(cmdReplacer, " ")...)
-
-	stdout, err := execWithPiping(runCommandSplitWithNode)
-	if err != nil {
-		return fmt.Errorf("Docker run has failed: %s", err)
-	}
-
-	stack.ExpectedOutput = stdout
-
-	stack.stopDockerContainer() //Stop the container just in case its running
-
-	return nil
-}
-
-func (stack *Stack) weCheckRunMainBinaryFromBashAsDefaultUser() error {
-	stack.stopDockerContainer() //Stop the container just in case its running
-
-	runCommand := "docker run -i --rm --name " + stack.Name + " " + stack.ImageName + " sh -c"
-	runCommandSplitWithoutNode := strings.Split(runCommand, " ")
-
-	cmdReplacer := strings.Replace(stack.Cmd, "${current.project.path}", stack.SampleFolderName, -1)
-	cmdReplacer = strings.Replace(cmdReplacer, "${GAE}", "/home/user/google_appengine", -1)
-	cmdReplacer = strings.Replace(cmdReplacer, "$TOMCAT_HOME", "/home/user/tomcat8", -1)
-
-	runCommandSplitWithNode := append(runCommandSplitWithoutNode, strings.Split(cmdReplacer, " ")...)
-
-	stdout, err := execWithPiping(runCommandSplitWithNode)
-	if err != nil {
-		return fmt.Errorf("Docker run has failed: %s", err)
-	}
-
-	stack.ExpectedOutput = stdout
-
-	stack.stopDockerContainer() //Stop the container just in case its running
-
-	return nil
-}
-
-func (stack *Stack) weCheckRunMainBinaryFromBashAsArbitraryUser() error {
-	stack.stopDockerContainer() //Stop the container just in case its running
-
-	runCommand := "docker run -i --rm --name " + stack.Name + " --user 15151515 " + stack.ImageName + " sh -c"
-	runCommandSplitWithoutNode := strings.Split(runCommand, " ")
-	cmdReplacer := strings.Replace(stack.Cmd, "${current.project.path}", stack.SampleFolderName, -1)
-	cmdReplacer = strings.Replace(cmdReplacer, "${GAE}", "/home/user/google_appengine", -1)
-	cmdReplacer = strings.Replace(cmdReplacer, "$TOMCAT_HOME", "/home/user/tomcat8", -1)
-
-	runCommandSplitWithNode := append(runCommandSplitWithoutNode, strings.Split(cmdReplacer, " ")...)
-	stdout, err := execWithPiping(runCommandSplitWithNode)
-	if err != nil {
-		return fmt.Errorf("Docker run has failed: %s", err)
-	}
-
-	stack.ExpectedOutput = stdout
-
-	stack.stopDockerContainer() //Stop the container just in case its running
-
-	return nil
-}
-
-func (stack *Stack) removeTempStackLocation() {
-	runCommand := "rm -rf /tmp/" + stack.Name
-	runCommandSplit := strings.Split(runCommand, " ")
-	exec.Command(runCommandSplit[0], runCommandSplit[1:]...).Run()
-}
-
-func (stack *Stack) stopDockerContainer() error {
-	_, dockerRunErr := exec.Command("docker", "stop", stack.Name).Output()
-	if dockerRunErr != nil {
-		return fmt.Errorf("Docker run has failed: %s", dockerRunErr)
-	}
-
-	_, dockerRmErr := exec.Command("docker", "rm", stack.Name).Output()
-	if dockerRmErr != nil {
-		return fmt.Errorf("Docker run has failed: %s", dockerRunErr)
-	}
-	return nil
-}
-
-func (stack *Stack) weHaveStackNameImageNameCmdExpectedOutputSampleAndSampleFolderName(name, imageName, cmd, expectedOutput, sample, sampleFolderName string) error {
-	if name == "" || imageName == "" || cmd == "" {
-		return fmt.Errorf("One of the args has not been set")
-	}
-
-	stack.Name = name
-	stack.ImageName = imageName
-	stack.Cmd = cmd
-	stack.ExpectedOutput = expectedOutput
-	stack.Sample = sample
-	stack.SampleFolderName = sampleFolderName
-
-	return nil
-}
-
-func (stack *Stack) weCheckExecOfMainBinaryAsDefaultUser() error {
-	stack.stopDockerContainer() //Stop the container just in case its running
-
-	_, dockerRunErr := exec.Command("docker", "run", "-d", "--name", stack.Name, stack.ImageName, "tail", "-f", "/dev/null").Output()
-	if dockerRunErr != nil {
-		return fmt.Errorf("Docker run has failed: %s", dockerRunErr)
-	}
-
-	gitCloneRunCommand := "docker exec -i " + stack.Name + " git clone " + stack.Sample + " " + stack.SampleFolderName
-	gitCloneRunCommandSplitArgs := strings.Split(gitCloneRunCommand, " ")
-
-	execWithPiping(gitCloneRunCommandSplitArgs)
-
-	cmdReplacer := strings.Replace(stack.Cmd, "${current.project.path}", stack.SampleFolderName, -1)
-	cmdReplacer = strings.Replace(cmdReplacer, "${GAE}", "/home/user/google_appengine", -1)
-	cmdReplacer = strings.Replace(cmdReplacer, "$TOMCAT_HOME", "/home/user/tomcat8", -1)
-
-	runCommand := "docker exec -i " + stack.Name + " " + cmdReplacer
-	runCommandSplitArgs := strings.Split(runCommand, " ")
-
-	stdout, err := execWithPiping(runCommandSplitArgs)
-
-	if err != nil {
-		return fmt.Errorf("Docker exec failed: %s", err)
-	}
-
-	stack.Output = stdout
-
-	dockerStopErr := stack.stopDockerContainer()
-	if dockerStopErr != nil {
-		return fmt.Errorf("Docker stop failed: %s", dockerStopErr)
-	}
-
-	return nil
-}
-
-func (stack *Stack) stdoutShouldBe(stdout string) error {
-	if strings.Contains(stdout, stack.Output) && stack.ExpectedOutput != "" {
-		return fmt.Errorf("Result was not expected. Got %s, Expected %s", stdout, stack.ExpectedOutput)
-	}
-	return nil
-}
-
-func (stack *Stack) weCheckExecOfMainBinaryAsArbitraryUser() error {
-	stack.stopDockerContainer() //Stop the container just in case its running
-
-	_, dockerRunErr := exec.Command("docker", "run", "-d", "--name", stack.Name, "--user", "15151515", stack.ImageName, "tail", "-f", "/dev/null").Output()
-	if dockerRunErr != nil {
-		return fmt.Errorf("Docker run has failed: %s", dockerRunErr)
-	}
-
-	cmdReplacer := strings.Replace(stack.Cmd, "${current.project.path}", stack.SampleFolderName, -1)
-	cmdReplacer = strings.Replace(cmdReplacer, "${GAE}", "/home/user/google_appengine", -1)
-	cmdReplacer = strings.Replace(cmdReplacer, "$TOMCAT_HOME", "/home/user/tomcat8", -1)
-	runCommand := "docker exec -i " + stack.Name + " " + cmdReplacer
-	runCommandSplitArgs := strings.Split(runCommand, " ")
-	stdout, execErr := execWithPiping(runCommandSplitArgs)
-	if execErr != nil {
-		return fmt.Errorf("Docker exec failed: %s", execErr)
-	}
-
-	stack.ExpectedOutput = stdout
-
-	dockerStopErr := stack.stopDockerContainer()
-	if dockerStopErr != nil {
-		return fmt.Errorf("Docker stop failed: %s", dockerStopErr)
-	}
-
-	return nil
-}
-
-func (stack *Stack) theImageIsBuiltAndWeHaveStackNameImageNameSampleCmdExpectedOutput(name, imageName, sample, cmd, expectedOutput string) error {
-	if name == "" || imageName == "" || sample == "" || cmd == "" || expectedOutput == "" {
-		return fmt.Errorf("One of the args has not been set")
-	}
-
-	stack.Name = name
-	stack.ImageName = imageName
-	stack.Sample = sample
-	stack.Cmd = cmd
-	stack.ExpectedOutput = expectedOutput
-
-	return nil
-}
-
 // Post is a post
 type Post struct {
 	Environments interface{}   `json:"environments"`
@@ -714,18 +510,17 @@ type WorkspaceStatus struct {
 	WorkspaceStatus string `json:"status"`
 }
 
-//
-//
-//	Workspace stuff
-//
-//
+type stackTestRuntimeInfo struct {
+	ID                        string
+	ExecAgentURL              string
+	WSAgentURL                string
+	WorkspaceStartingID       string
+	CommandExitCode           int
+	WorkspaceStopStatusCode   int
+	WorkspaceRemoveStatusCode int
+}
 
-// triggerStackStart takes in a stack configuration and starts an Eclipse Che
-// workspace using that configuration
-//
-// Returns the http request response when starting the workspace
-func triggerStackStart(workspaceConfiguration WorkspaceSample, sample interface{}) Workspace2 {
-	workspaceName := workspaceConfiguration.ID
+func (stackRuntimeInfo *stackTestRuntimeInfo) triggerStackStart(workspaceConfiguration StackConfigInfo, sample interface{}) (Workspace2, error) {
 	workspaceConfig := workspaceConfiguration.Config
 	test, err1 := json.Marshal(workspaceConfig)
 	if err1 != nil {
@@ -736,12 +531,12 @@ func triggerStackStart(workspaceConfiguration WorkspaceSample, sample interface{
 	WorkspaceConfigInterface := &WorkspaceConfig{}
 	json.Unmarshal(jsonBytes, WorkspaceConfigInterface)
 
-	a := Post{Environments: WorkspaceConfigInterface.EnvironmentConfig, Namespace: "che", Name: workspaceName + "-stack-test", DefaultEnv: "default"}
+	a := Post{Environments: WorkspaceConfigInterface.EnvironmentConfig, Namespace: "che", Name: stackRuntimeInfo.ID + "-stack-test", DefaultEnv: "default"}
 	marshalled, _ := json.MarshalIndent(a, "", "    ")
 	re := regexp.MustCompile(",[\\n|\\s]*\"com.redhat.bayesian.lsp\"")
 	noBayesian := re.ReplaceAllString(string(marshalled), "")
 	req, err := http.NewRequest("POST", fullyQualifiedEndpoint+"/workspace?start-after-create=true", bytes.NewBufferString(noBayesian))
-	//fmt.Print(fullyQualifiedEndpoint + "/workspace?start-after-create=true")
+
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
@@ -751,23 +546,16 @@ func triggerStackStart(workspaceConfiguration WorkspaceSample, sample interface{
 	}
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(resp.Body)
-	//newStr := buf.String()
-	//fmt.Printf(newStr)
-	defer resp.Body.Close()
 
-	//fmt.Printf(string(buf.Bytes()))
+	defer resp.Body.Close()
 
 	var WorkspaceResponse Workspace2
 	json.Unmarshal(buf.Bytes(), &WorkspaceResponse)
 
-	return WorkspaceResponse
+	return WorkspaceResponse, nil
 }
 
-type runArgsData struct {
-	Data []Stack
-}
-
-func testAllStacks(tag string) []WorkspaceSample {
+func testAllStacks(tag string) ([]WorkspaceTableItem, map[string]StackConfigInfo) {
 	stackData := getJSON(eclipseStackLocation)
 	var data []Workspace
 	jsonErr := json.Unmarshal(stackData, &data)
@@ -779,97 +567,82 @@ func testAllStacks(tag string) []WorkspaceSample {
 	return generateExampleTables(data, samples, tag)
 }
 
-func addSampleToProject(wsAgentURL string, sample interface{}) {
-	sampleSlice := []interface{}{sample}
-	marshalled, _ := json.MarshalIndent(sampleSlice, "", "    ")
+func addSampleToProject(wsAgentURL string, sample []WorkspaceSample) error {
+	marshalled, _ := json.MarshalIndent(sample, "", "    ")
 	req, err := http.NewRequest("POST", wsAgentURL+"/project/batch", bytes.NewBufferString(string(marshalled)))
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("Could not complete the http request: %v", err)
 	}
 
 	defer resp.Body.Close()
-}
 
-func stopWorkspace(workspaceID string) error {
-	url := fullyQualifiedEndpoint + "/workspace/" + workspaceID + "/runtime"
-	req, err := http.NewRequest("DELETE", url, bytes.NewBufferString(""))
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf(err.Error())
-	}
-	resp.Body.Close()
 	return nil
 }
 
-func removeWorkspace(workspaceID string) error {
-
-	url := fullyQualifiedEndpoint + "/workspace/" + workspaceID
-	req, err := http.NewRequest("DELETE", url, bytes.NewBufferString(""))
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf(err.Error())
-	}
-	resp.Body.Close()
-	return nil
-}
-
-func getWorkspaceStatusByID(workspaceID string) WorkspaceStatus {
+func getWorkspaceStatusByID(workspaceID string) (WorkspaceStatus, error) {
 	client := http.Client{
 		Timeout: time.Second * 60,
 	}
+
+	var data WorkspaceStatus
 
 	buf2 := new(bytes.Buffer)
 	url := fullyQualifiedEndpoint + "/workspace/" + workspaceID
 	req, err := http.NewRequest(http.MethodGet, url, buf2)
 	if err != nil {
-		log.Fatal(err)
+		return data, fmt.Errorf("Could not retrieve contents at url: %s with error %v", url, err)
 	}
 
 	res, getErr := client.Do(req)
 	if getErr != nil {
-		log.Fatal(getErr)
+		return data, fmt.Errorf("Could not retrieve contents at url: %s with error %v", url, getErr)
 	}
 
 	body, readErr := ioutil.ReadAll(res.Body)
 	if readErr != nil {
-		log.Fatal(readErr)
+		return data, fmt.Errorf("Could not retrieve response body: %v", readErr)
 	}
 
-	var data WorkspaceStatus
 	jsonErr := json.Unmarshal([]byte(body), &data)
 
 	if jsonErr != nil {
-		log.Fatal(jsonErr)
+		return data, fmt.Errorf("Could not unmarshal contents into WorkspaceStatus: %v", jsonErr)
 	}
 
-	return data
+	return data, nil
 }
 
-func blockWorkspaceUntilStarted(workspaceID string) {
-	workspaceStatus := getWorkspaceStatusByID(workspaceID)
+func blockWorkspaceUntilStarted(workspaceID string) error {
+	workspaceStatus, err := getWorkspaceStatusByID(workspaceID)
+	if err != nil {
+		return err
+	}
 	for workspaceStatus.WorkspaceStatus == "STARTING" {
 		time.Sleep(30 * time.Second)
-		workspaceStatus = getWorkspaceStatusByID(workspaceID)
+		workspaceStatus, err = getWorkspaceStatusByID(workspaceID)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func blockWorkspaceUntilStopped(workspaceID string) error {
-	workspaceStatus := getWorkspaceStatusByID(workspaceID)
-
+	workspaceStatus, err := getWorkspaceStatusByID(workspaceID)
+	if err != nil {
+		return err
+	}
 	//Workspace hasn't quite shut down due to speed
 	for workspaceStatus.WorkspaceStatus == "SNAPSHOTTING" {
 		time.Sleep(15 * time.Second)
-		workspaceStatus = getWorkspaceStatusByID(workspaceID)
+		workspaceStatus, err = getWorkspaceStatusByID(workspaceID)
+		if err != nil {
+			return err
+		}
 	}
 
 	time.Sleep(15 * time.Second)
@@ -878,79 +651,6 @@ func blockWorkspaceUntilStopped(workspaceID string) error {
 		return fmt.Errorf("Workspace was not stopped")
 	}
 	return nil
-}
-
-func TestMain(m *testing.M) {
-	// singleStackTestPtr := flag.Bool("s", false, "Start Tests on a Single Stack (Optional)")
-
-	// namePtr := flag.String("name", "", "Set a name for the Stack. Only available when -s is enabled.")
-	// imageNamePtr := flag.String("image_loc", "", "Set a image name for the Stack. Only available when -s is enabled.")
-	// cmdToTestPtr := flag.String("cmd", "", "Set a command to test on the Stack. Only available when -s is enabled.")
-	// expectedOutputPtr := flag.String("eo", "", "Set the expected value of cmd. Only available when -s is enabled.")
-	// samplePtr := flag.String("sample", "", "Set the sample project of cmd. Only available when -s is enabled.")
-
-	// allStacksTestsPtr := flag.Bool("all", false, "Start Tests for All Stacks (Default)")
-	// allStacksTestByTagPtr := flag.String("t", "?", "Start Tests for All Stacks Using a Tag (Optional)")
-
-	// flag.Parse()
-
-	// if *singleStackTestPtr && (*allStacksTestsPtr || *allStacksTestByTagPtr == "") {
-	// 	fmt.Print("Only one of args (s, a, t) args are allowed")
-	// 	os.Exit(1)
-	// }
-
-	// if *allStacksTestsPtr && *allStacksTestByTagPtr == "" {
-	// 	fmt.Print("Only one of (a, t) args are allowed")
-	// 	os.Exit(1)
-	// }
-
-	// if *singleStackTestPtr {
-	// 	tableData.Data = testSingleStack(*namePtr, *imageNamePtr, *cmdToTestPtr, *expectedOutputPtr, *samplePtr)
-	// } else if *allStacksTestsPtr || *allStacksTestByTagPtr == "" {
-	// 	tableData.Data = testAllStacks(*allStacksTestByTagPtr)
-	// } else {
-	// 	fmt.Print("Err: Missing an argument")
-	// 	os.Exit(1)
-	// }
-
-	// status := godog.RunWithOptions("godog", func(s *godog.Suite) {
-	// 	FeatureContext(s)
-	// }, godog.Options{
-	// 	Format: "progress",
-	// 	Paths:  []string{"features"},
-	// })
-
-	// start := time.Now()
-	// if st := m.Run(); st > status {
-	// 	status = st
-	// }
-	// elapsed := time.Since(start)
-	// os.Exit(status)
-	// fmt.Printf("go test -all took %s", elapsed)
-
-	// allStackData := testAllStacks("")
-
-	// for _, workspace := range allStackData {
-	// 	fmt.Printf("Starting workspace tests for %s\n", workspace.ID)
-	// 	workspaceStartingResp := triggerStackStart(workspace, workspace.Sample)
-	// 	blockWorkspaceUntilStarted(workspaceStartingResp.ID)
-	// 	agents := getExecAgentHTTP(workspaceStartingResp.ID)
-
-	// 	for agents.execAgentURL == "" || agents.wsAgentURL == "" {
-	// 		agents = getExecAgentHTTP(workspaceStartingResp.ID)
-	// 	}
-	// 	addSampleToProject(agents.wsAgentURL, workspace.Sample)
-
-	// 	for _, cmd := range workspace.Command {
-	// 		Pid := postCommandToWorkspace(workspaceStartingResp.ID, agents.execAgentURL, cmd, workspace.SamplePath)
-	// 		continuouslyCheckCommandExitCode(Pid, agents.execAgentURL)
-	// 	}
-
-	// 	stopWorkspace(workspaceStartingResp.ID)
-	// 	blockWorkspaceUntilStopped(workspaceStartingResp.ID)
-	// 	removeWorkspace(workspaceStartingResp.ID)
-	// }
-
 }
 
 func (m *Minishift) executingSucceeds(addonInstall string) error {
@@ -969,20 +669,102 @@ func (m *Minishift) minishiftShouldHaveState(runningState string) error {
 	return m.shouldHaveState(runningState)
 }
 
-func startingAWorkspaceWithStackSucceeds(arg1 string) error {
-	return godog.ErrPending
+func (stackRuntimeInfo *stackTestRuntimeInfo) startingAWorkspaceWithStackPathAndCommandSucceeds(stack, path, command string) error {
+
+	var workspaceConfigInfo = StackConfigMap[stack] //This is going to get you back the workspace config
+	workspaceStartingResp, stackStartErr := stackRuntimeInfo.triggerStackStart(workspaceConfigInfo, path)
+	if stackStartErr != nil {
+		return fmt.Errorf("Problem starting the workspace: %v", stackStartErr)
+	}
+
+	blockingWorkspaceErr := blockWorkspaceUntilStarted(workspaceStartingResp.ID)
+	if blockingWorkspaceErr != nil {
+		return fmt.Errorf("Problem blocking the workspace until started: %v", stackStartErr)
+	}
+
+	agents, err := getExecAgentHTTP(workspaceStartingResp.ID)
+
+	if err != nil {
+		return err
+	}
+
+	for agents.execAgentURL == "" || agents.wsAgentURL == "" {
+		agents, err = getExecAgentHTTP(workspaceStartingResp.ID)
+		if err != nil {
+			return err
+		}
+	}
+
+	addingSampleError := addSampleToProject(agents.wsAgentURL, workspaceConfigInfo.WorkspaceSampleArray)
+	if addingSampleError != nil {
+		return addingSampleError
+	}
+
+	return nil
+
 }
 
-func workspaceStartShouldBeSuccessful() error {
-	return godog.ErrPending
+func (stackRuntimeInfo *stackTestRuntimeInfo) userRunsCommandOnPath(command Command, path string) error {
+	Pid := postCommandToWorkspace(stackRuntimeInfo.WorkspaceStartingID, stackRuntimeInfo.ExecAgentURL, command, path)
+	stackRuntimeInfo.continuouslyCheckCommandExitCode(Pid, stackRuntimeInfo.ExecAgentURL)
+	return nil
 }
 
-func userRunsCommands() error {
-	return godog.ErrPending
+func (stackRuntimeInfo *stackTestRuntimeInfo) commandShouldBeRanSuccessfully() error {
+	if stackRuntimeInfo.CommandExitCode > 0 {
+		return fmt.Errorf("Command did not complete") //Still need to get the logs and print them
+	}
+	return fmt.Errorf("Command did not complete")
 }
 
-func commandShouldBeRanSuccessfully() error {
-	return godog.ErrPending
+func (stackRuntimeInfo *stackTestRuntimeInfo) userStopsWorkspace() error {
+	url := fullyQualifiedEndpoint + "/workspace/" + stackRuntimeInfo.WorkspaceStartingID + "/runtime"
+	req, err := http.NewRequest("DELETE", url, bytes.NewBufferString(""))
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf(err.Error())
+	}
+	resp.Body.Close()
+
+	blockWorkspaceUntilStopped(stackRuntimeInfo.WorkspaceStartingID)
+
+	stackRuntimeInfo.WorkspaceStopStatusCode = resp.StatusCode
+
+	return nil
+}
+
+func (stackRuntimeInfo *stackTestRuntimeInfo) workspaceStopShouldBeSuccessful() error {
+	if stackRuntimeInfo.WorkspaceStopStatusCode >= 300 || stackRuntimeInfo.WorkspaceStopStatusCode < 200 {
+		return fmt.Errorf("Could not stop the workspace")
+	}
+	return nil
+}
+
+func (stackRuntimeInfo *stackTestRuntimeInfo) workspaceIsRemoved() error {
+	url := fullyQualifiedEndpoint + "/workspace/" + stackRuntimeInfo.WorkspaceStartingID
+	req, err := http.NewRequest("DELETE", url, bytes.NewBufferString(""))
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf(err.Error())
+	}
+
+	stackRuntimeInfo.WorkspaceRemoveStatusCode = resp.StatusCode
+	defer resp.Body.Close()
+
+	return nil
+}
+
+func (stackRuntimeInfo *stackTestRuntimeInfo) workspaceRemovalShouldBeSuccessful() error {
+	if stackRuntimeInfo.WorkspaceRemoveStatusCode >= 300 || stackRuntimeInfo.WorkspaceRemoveStatusCode < 200 {
+		return fmt.Errorf("Could not stop the workspace")
+	}
+	return nil
 }
 
 func FeatureContext(s *godog.Suite) {
@@ -993,13 +775,19 @@ func FeatureContext(s *godog.Suite) {
 
 	minishift = &Minishift{runner: runner}
 
+	stackRuntimeInfo := &stackTestRuntimeInfo{}
+
+	s.be
+
 	s.Step(`^executing "([^"]*)" succeeds$`, minishift.executingSucceeds)
 	s.Step(`^stdout should contain "([^"]*)"$`, stdoutShouldContain)
 	s.Step(`^Minishift has state "([^"]*)"$`, minishift.minishiftHasState)
 	s.Step(`^Minishift should have state "([^"]*)"$`, minishift.minishiftShouldHaveState)
-	s.Step(`^stdout should contain$`, stdoutShouldContain)
-	s.Step(`^starting a workspace with stack "([^"]*)" succeeds$`, startingAWorkspaceWithStackSucceeds)
-	s.Step(`^workspace start should be successful$`, workspaceStartShouldBeSuccessful)
-	s.Step(`^user runs commands$`, userRunsCommands)
-	s.Step(`^command should be ran successfully$`, commandShouldBeRanSuccessfully)
+	s.Step(`^starting a workspace with stack "([^"]*)" path "([^"]*)" and command "([^"]*)" succeeds$`, stackRuntimeInfo.startingAWorkspaceWithStackPathAndCommandSucceeds)
+	s.Step(`^user runs commands$`, stackRuntimeInfo.userRunsCommandOnPath)
+	s.Step(`^command should be ran successfully$`, stackRuntimeInfo.commandShouldBeRanSuccessfully)
+	s.Step(`^user stops workspace$`, stackRuntimeInfo.userStopsWorkspace)
+	s.Step(`^workspace stop should be successful$`, stackRuntimeInfo.workspaceStopShouldBeSuccessful)
+	s.Step(`^workspace is removed$`, stackRuntimeInfo.workspaceIsRemoved)
+	s.Step(`^workspace removal should be successful$`, stackRuntimeInfo.workspaceRemovalShouldBeSuccessful)
 }
