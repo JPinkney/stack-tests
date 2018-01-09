@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,6 +16,29 @@ import (
 	"github.com/DATA-DOG/godog/gherkin"
 	"github.com/minishift/minishift/test/integration/util"
 )
+
+func setupExamplesData(g *gherkin.Feature) {
+	WorkspaceTableItemArray, stackConfigInfo := testAllStacks("")
+	StackConfigMap = stackConfigInfo
+	for _, scenario := range g.ScenarioDefinitions {
+		newTableRow := tableRowArrayGenerator(WorkspaceTableItemArray)
+		scenario.(*gherkin.ScenarioOutline).Examples[0].TableBody = newTableRow
+	}
+}
+
+func tableRowArrayGenerator(cellDataArray []WorkspaceTableItem) []*gherkin.TableRow {
+
+	var tableRowArray []*gherkin.TableRow
+
+	for _, tableItem := range cellDataArray {
+
+		newTableRow := tableRowGenerator(tableItem)
+		tableRowArray = append(tableRowArray, newTableRow)
+
+	}
+
+	return tableRowArray
+}
 
 func tableRowGenerator(cellData WorkspaceTableItem) *gherkin.TableRow {
 
@@ -50,31 +72,6 @@ func tableRowGenerator(cellData WorkspaceTableItem) *gherkin.TableRow {
 
 	return &newRow
 
-}
-
-func tableRowArrayGenerator(cellDataArray []WorkspaceTableItem) []*gherkin.TableRow {
-
-	var tableRowArray []*gherkin.TableRow
-
-	for _, tableItem := range cellDataArray {
-
-		newTableRow := tableRowGenerator(tableItem)
-		tableRowArray = append(tableRowArray, newTableRow)
-
-	}
-
-	return tableRowArray
-}
-
-func setupExamplesData(g *gherkin.Feature) {
-	WorkspaceTableItemArray, stackConfigInfo := testAllStacks("")
-	StackConfigMap = stackConfigInfo
-	for _, scenario := range g.ScenarioDefinitions {
-		row := scenario.(*gherkin.ScenarioOutline).Examples[0].TableBody
-		newTableRow := tableRowArrayGenerator(WorkspaceTableItemArray)
-
-		scenario.(*gherkin.ScenarioOutline).Examples[0].TableBody = newTableRow
-	}
 }
 
 // Workspace for finding out the workspace status
@@ -157,12 +154,9 @@ type SampleSourceType struct {
 var rhStackLocation = "https://raw.githubusercontent.com/redhat-developer/rh-che/master/assembly/fabric8-stacks/src/main/resources/stacks.json"
 var eclipseStackLocation = "http://localhost:8080/api/stack"
 var samples = "https://raw.githubusercontent.com/eclipse/che/master/ide/che-core-ide-templates/src/main/resources/samples.json"
-var tableData runArgsData
 var fullyQualifiedEndpoint = "http://localhost:8080/api"
 var StackConfigMap map[string]StackConfigInfo
 
-// getJSON gets the json from URL and returns it
-// To use the JSON you need to UnMarshall the response into your object
 func getJSON(url string) []byte {
 
 	client := http.Client{
@@ -471,20 +465,6 @@ func orderCommands(commands []Command) []Command {
 	return orderedCommands
 }
 
-func execWithPiping(runCommandArgsSplit []string) (string, error) {
-	dockerExecOutput := exec.Command(runCommandArgsSplit[0], runCommandArgsSplit[1:]...)
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	dockerExecOutput.Stdout = &stdout
-	dockerExecOutput.Stderr = &stderr
-	err := dockerExecOutput.Run()
-	if err != nil {
-		return stdout.String(), fmt.Errorf("%s", err)
-	}
-
-	return stdout.String(), nil
-}
-
 // Post is a post
 type Post struct {
 	Environments interface{}   `json:"environments"`
@@ -777,8 +757,7 @@ func FeatureContext(s *godog.Suite) {
 
 	stackRuntimeInfo := &stackTestRuntimeInfo{}
 
-	s.be
-
+	s.BeforeFeature(setupExamplesData)
 	s.Step(`^executing "([^"]*)" succeeds$`, minishift.executingSucceeds)
 	s.Step(`^stdout should contain "([^"]*)"$`, stdoutShouldContain)
 	s.Step(`^Minishift has state "([^"]*)"$`, minishift.minishiftHasState)
