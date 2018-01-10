@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/minishift/minishift/test/integration/util"
 )
@@ -80,22 +79,6 @@ func (m *Minishift) isTheActiveProfile(profileName string) error {
 	return nil
 }
 
-func (m *Minishift) executingRetryingTimesWithWaitPeriodOfSeconds(command string, retry, sleep int) error {
-	for i := 0; i < retry; i++ {
-		err := m.executingOcCommand(command)
-		if err != nil {
-			return err
-		}
-		lastCommandOutput := getLastCommandOutput()
-		if lastCommandOutput.ExitCode == 0 {
-			break
-		}
-		time.Sleep(time.Duration(sleep) * time.Second)
-	}
-
-	return nil
-}
-
 func (m *Minishift) GetVariableByName(name string) *CommandVariable {
 	if len(commandVariables) == 0 {
 		return nil
@@ -109,44 +92,6 @@ func (m *Minishift) GetVariableByName(name string) *CommandVariable {
 			return &variable
 		}
 	}
-
-	return nil
-}
-
-func (m *Minishift) setVariableExecutingOcCommand(name string, command string) error {
-	return m.setVariableFromExecution(name, minishift.executingOcCommand, command)
-}
-
-func (m *Minishift) setVariableExecutingMinishiftCommand(name string, command string) error {
-	return m.setVariableFromExecution(name, minishift.executingMinishiftCommand, command)
-}
-
-func (m *Minishift) SetVariable(name string, value string) {
-	commandVariables = append(commandVariables,
-		CommandVariable{
-			name,
-			value,
-		})
-}
-
-func (m *Minishift) setVariableFromExecution(name string, execute commandRunner, command string) error {
-	err := execute(command)
-	if err != nil {
-		return err
-	}
-
-	lastCommandOutput := getLastCommandOutput()
-	commandFailed := (lastCommandOutput.ExitCode != 0 ||
-		len(lastCommandOutput.StdErr) != 0)
-
-	if commandFailed {
-		return fmt.Errorf("Command '%s' did not execute successfully. cmdExit: %d, cmdErr: %s",
-			lastCommandOutput.Command,
-			lastCommandOutput.ExitCode,
-			lastCommandOutput.StdErr)
-	}
-
-	m.SetVariable(name, strings.TrimSpace(lastCommandOutput.StdOut))
 
 	return nil
 }
