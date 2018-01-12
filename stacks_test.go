@@ -34,16 +34,9 @@ func tableRowArrayGenerator(cellDataArray []WorkspaceTableItem) []*gherkin.Table
 
 	var tableRowArray []*gherkin.TableRow
 
-	count := 0
 	for _, tableItem := range cellDataArray {
-
-		if count == 0 {
-			newTableRow := tableRowGenerator(tableItem)
-			tableRowArray = append(tableRowArray, newTableRow)
-		}
-
-		count++
-
+		newTableRow := tableRowGenerator(tableItem)
+		tableRowArray = append(tableRowArray, newTableRow)
 	}
 
 	return tableRowArray
@@ -83,7 +76,6 @@ func tableRowGenerator(cellData WorkspaceTableItem) *gherkin.TableRow {
 
 }
 
-// Workspace for finding out the workspace status
 type Workspace struct {
 	ID      string              `json:"id"`
 	Config  WorkspaceConfig     `json:"workspaceConfig"`
@@ -92,7 +84,6 @@ type Workspace struct {
 	Command []Command           `json:"commands"`
 }
 
-// Workspace for finding out the workspace status
 type Workspace2 struct {
 	ID string `json:"id"`
 }
@@ -115,7 +106,6 @@ type WorkspaceSample struct {
 	SamplePath string
 }
 
-// Workspace for finding out the workspace status
 type WorkspaceStacks struct {
 	Namespace  string                   `json:"namespace"`
 	Status     string                   `json:"status"`
@@ -134,7 +124,6 @@ type Sample struct {
 	Path     string           `json:"path"`
 }
 
-// WorkspaceConfig is a config
 type WorkspaceConfig struct {
 	EnvironmentConfig EnvironmentConfig   `json:"environments"`
 	Name              string              `json:"name"`
@@ -161,9 +150,9 @@ type SampleSourceType struct {
 }
 
 var rhStackLocation = "https://raw.githubusercontent.com/redhat-developer/rh-che/master/assembly/fabric8-stacks/src/main/resources/stacks.json"
-var eclipseStackLocation = "http://localhost:8080/api/stack"
+var eclipseStackLocation = "http://che-eclipse-che.192.168.42.233.nip.io/api/stack"
 var samples = "https://raw.githubusercontent.com/eclipse/che/master/ide/che-core-ide-templates/src/main/resources/samples.json"
-var fullyQualifiedEndpoint = "http://localhost:8080/api"
+var fullyQualifiedEndpoint = "http://che-eclipse-che.192.168.42.233.nip.io/api"
 var StackConfigMap map[string]StackConfigInfo
 var ProjectMap map[string][]Command
 
@@ -214,6 +203,16 @@ type Agent struct {
 	wsAgentURL   string
 }
 
+type ProcessStruct struct {
+	Pid         int    `json:"pid"`
+	Name        string `json:"name"`
+	CommandLine string `json:"commandLine"`
+	Type        string `json:"type"`
+	Alive       bool   `json:"alive"`
+	NativePid   int    `json:"nativePid"`
+	ExitCode    int    `json:"exitCode"`
+}
+
 func getExecAgentHTTP(workspaceID string) (Agent, error) {
 	var agents Agent
 
@@ -246,16 +245,6 @@ func getExecAgentHTTP(workspaceID string) (Agent, error) {
 	return agents, nil
 }
 
-type ProcessStruct struct {
-	Pid         int    `json:"pid"`
-	Name        string `json:"name"`
-	CommandLine string `json:"commandLine"`
-	Type        string `json:"type"`
-	Alive       bool   `json:"alive"`
-	NativePid   int    `json:"nativePid"`
-	ExitCode    int    `json:"exitCode"`
-}
-
 func postCommandToWorkspace(workspaceID, execAgentURL string, sampleCommand string, samplePath string) int {
 
 	//Find the command from the project
@@ -276,7 +265,7 @@ func postCommandToWorkspace(workspaceID, execAgentURL string, sampleCommand stri
 	req, err := http.NewRequest("POST", execAgentURL, bytes.NewBufferString(string(marshalled)))
 	req.Header.Set("Content-Type", "application/json")
 
-	fmt.Printf("%v", req)
+	//fmt.Printf("%v", req)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -361,7 +350,7 @@ func checkExecStatus(Pid, status int, execAgentURL string) {
 			buffer.WriteString("\n")
 		}
 
-		fmt.Printf(buffer.String())
+		//fmt.Printf(buffer.String())
 	}
 
 }
@@ -503,7 +492,6 @@ func orderCommands(commands []Command) []Command {
 	return orderedCommands
 }
 
-// Post is a post
 type Post struct {
 	Environments interface{}   `json:"environments"`
 	Namespace    string        `json:"namespace"`
@@ -518,12 +506,10 @@ type Commands struct {
 	Type        string `json:"type"`
 }
 
-// EnvironmentConfig is a config
 type EnvironmentConfig struct {
 	Default map[string]interface{} `json:"default"`
 }
 
-// WorkspaceStatus helps unmarshal workspace IDs to check if a given workspace is running
 type WorkspaceStatus struct {
 	WorkspaceStatus string `json:"status"`
 }
@@ -546,7 +532,7 @@ func (stackRuntimeInfo *stackTestRuntimeInfo) triggerStackStart(workspaceConfigu
 	re := regexp.MustCompile(",[\\n|\\s]*\"com.redhat.bayesian.lsp\"")
 	noBayesian := re.ReplaceAllString(string(marshalled), "")
 
-	fmt.Printf("%v", noBayesian)
+	//fmt.Printf("%v", noBayesian)
 
 	req, err := http.NewRequest("POST", fullyQualifiedEndpoint+"/workspace?start-after-create=true", bytes.NewBufferString(noBayesian))
 
@@ -596,7 +582,7 @@ func addSampleToProject(wsAgentURL string, sample []WorkspaceSample) error {
 	req, err := http.NewRequest("POST", wsAgentURL+"/project/batch", bytes.NewBufferString(string(marshalled)))
 	req.Header.Set("Content-Type", "application/json")
 
-	fmt.Printf("%v", req)
+	//fmt.Printf("%v", req)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
