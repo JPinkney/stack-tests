@@ -2,8 +2,6 @@
 Feature: Che add-on
   Che addon starts Eclipse Che
 
-  Background: Given Minishift-addons repository is cloned
-
   Scenario: User enables the che add-on
     When executing "minishift addons enable che" succeeds
     Then stdout should contain "Add-on 'che' enabled"
@@ -15,17 +13,26 @@ Feature: Che add-on
     And stdout should contain "Che installed"
   
   Scenario Outline: User starts workspace, imports projects, checks run commands
-    Given Minishift has state "Running" and starting a workspace with stack "<stack>" path "<path>" and command "<command>" succeeds
-    When user runs command "<command>" on path "<path>"
-    Then command should be ran successfully
+    Given Minishift has state "Running" 
+    When starting a workspace with stack "<stack>" succeeds
+    Then workspace should have state "Running"
+    When importing the sample project "<sample>" succeeds
+    Then workspace should have 1 project
+    When user runs build command on sample "<sample>"
+    Then exit code should be 0
     When user stops workspace
     Then workspace stop should be successful
     When workspace is removed
     Then workspace removal should be successful
     
     Examples:
-    | stack      | path | command |
-    |            |      |         |
+    | stack                 | sample                                                                   |
+    | .NET CentOS           | https://github.com/che-samples/dotnet-web-simple                         |
+    | CentOS nodejs         | https://github.com/che-samples/web-nodejs-sample                         |
+    | CentOS Wildfly Swarm  | https://github.com/wildfly-swarm-openshiftio-boosters/wfswarm-rest-http  |
+    | Eclipse Vert.x        | https://github.com/openshiftio-vertx-boosters/vertx-http-booster         |
+    | Java CentOS           | https://github.com/che-samples/console-java-simple                       |
+    | Spring Boot           | https://github.com/snowdrop/spring-boot-http-booster                     |
   
   Scenario: User stops and deletes the Minishift instance
     Given Minishift has state "Running"
