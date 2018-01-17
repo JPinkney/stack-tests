@@ -18,10 +18,10 @@ Feature: Che add-on
     Then workspace should have state "RUNNING"
     When importing the sample project "<sample>" succeeds
     Then workspace should have 1 project
-    When user runs command on "<sample>"
+    When user runs command on sample "<sample>"
     Then exit code should be 0
     When user stops workspace
-    Then workspace status should be "STOPPED"
+    Then workspace should have state "STOPPED"
     When workspace is removed
     Then workspace removal should be successful
     

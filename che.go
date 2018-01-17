@@ -304,7 +304,7 @@ func (c *cheRunner) blockWorkspaceUntilStopped(workspaceID string) error {
 		return err
 	}
 	//Workspace hasn't quite shut down due to speed
-	for workspaceStatus.WorkspaceStatus == "SNAPSHOTTING" {
+	for workspaceStatus.WorkspaceStatus == "SNAPSHOTTING" || workspaceStatus.WorkspaceStatus == "STOPPING" {
 		time.Sleep(15 * time.Second)
 		workspaceStatus, err = c.getWorkspaceStatusByID(workspaceID)
 		if err != nil {
