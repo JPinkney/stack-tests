@@ -13,25 +13,25 @@ Feature: Che add-on
     And stdout should contain "Che installed"
   
   Scenario Outline: User starts workspace, imports projects, checks run commands
-    Given Minishift has state "Running" 
+    Given Minishift has state "RUNNING" 
     When starting a workspace with stack "<stack>" succeeds
-    Then workspace should have state "Running"
+    Then workspace should have state "RUNNING"
     When importing the sample project "<sample>" succeeds
     Then workspace should have 1 project
-    When user runs build command on sample "<sample>"
+    When user runs command on "<sample>"
     Then exit code should be 0
     When user stops workspace
-    Then workspace stop should be successful
+    Then workspace status should be "STOPPED"
     When workspace is removed
     Then workspace removal should be successful
     
     Examples:
     | stack                 | sample                                                                   |
-    | .NET CentOS           | https://github.com/che-samples/dotnet-web-simple                         |
-    | CentOS nodejs         | https://github.com/che-samples/web-nodejs-sample                         |
-    | CentOS Wildfly Swarm  | https://github.com/wildfly-swarm-openshiftio-boosters/wfswarm-rest-http  |
+    | .NET CentOS           | https://github.com/che-samples/dotnet-web-simple.git                     |
+    | CentOS nodejs         | https://github.com/che-samples/web-nodejs-sample.git                     |
+    | CentOS WildFly Swarm  | https://github.com/wildfly-swarm-openshiftio-boosters/wfswarm-rest-http  |
     | Eclipse Vert.x        | https://github.com/openshiftio-vertx-boosters/vertx-http-booster         |
-    | Java CentOS           | https://github.com/che-samples/console-java-simple                       |
+    | Java CentOS           | https://github.com/che-samples/console-java-simple.git                   |
     | Spring Boot           | https://github.com/snowdrop/spring-boot-http-booster                     |
   
   Scenario: User stops and deletes the Minishift instance

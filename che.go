@@ -18,6 +18,7 @@ type Workspace struct {
 	Source  WorkspaceSourceType `json:"source"`
 	Tags    []string            `json:"tags"`
 	Command []Command           `json:"commands"`
+	Name    string              `json:"name"`
 }
 
 type Workspace2 struct {
@@ -25,9 +26,8 @@ type Workspace2 struct {
 }
 
 type StackConfigInfo struct {
-	Config               WorkspaceConfig
-	Projects             []Project
-	WorkspaceSampleArray []WorkspaceSample
+	WorkspaceConfig interface{}
+	Project         interface{}
 }
 
 type Project struct {
@@ -53,11 +53,12 @@ type WorkspaceStacks struct {
 }
 
 type Sample struct {
-	Name     string           `json:"name"`
-	Source   SampleSourceType `json:"source"`
-	Commands []Command        `json:"commands"`
-	Tags     []string         `json:"tags"`
-	Path     string           `json:"path"`
+	Name        string           `json:"name"`
+	Source      SampleSourceType `json:"source"`
+	Commands    []Command        `json:"commands"`
+	Tags        []string         `json:"tags"`
+	Path        string           `json:"path"`
+	ProjectType string           `json:"projectType"`
 }
 
 type WorkspaceConfig struct {
@@ -162,6 +163,10 @@ type stackTestRuntimeInfo struct {
 
 type cheRunner struct {
 	cheAPIEndpoint string
+	workspaceID    string
+	ExecAgentURL   string
+	WSAgentURL     string
+	PID            int
 }
 
 //Helper functions
@@ -203,8 +208,8 @@ func getExecLogs(Pid int, execAgentURL string) LogArray {
 	return data
 }
 
-func getCommandExitCode(Pid int, execAgentURL string) ProcessStruct {
-	jsonData := getJSON(execAgentURL + "/" + strconv.Itoa(Pid))
+func (c *cheRunner) getCommandExitCode(Pid int) ProcessStruct {
+	jsonData := getJSON(c.ExecAgentURL + "/" + strconv.Itoa(Pid))
 	var data ProcessStruct
 	jsonErr := json.Unmarshal(jsonData, &data)
 	if jsonErr != nil {
@@ -214,8 +219,9 @@ func getCommandExitCode(Pid int, execAgentURL string) ProcessStruct {
 	return data
 }
 
-func postCommandToWorkspace(workspaceID, execAgentURL string, sampleCommand string, samplePath string) int {
-	req, err := http.NewRequest("POST", execAgentURL, bytes.NewBufferString(sampleCommand))
+func (c *cheRunner) postCommandToWorkspace(sampleCommand Command) int {
+	sampleCommandMarshalled, _ := json.MarshalIndent(sampleCommand, "", "    ")
+	req, err := http.NewRequest("POST", c.ExecAgentURL, bytes.NewBufferString(string(sampleCommandMarshalled)))
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
@@ -242,17 +248,17 @@ func postCommandToWorkspace(workspaceID, execAgentURL string, sampleCommand stri
 }
 
 //WSAgent Processes
-func addSampleToProject(wsAgentURL string, sample []WorkspaceSample) error {
+func (c *cheRunner) addSamplesToProject(sample []Sample) error {
 
 	var sampleArray []interface{}
 	for _, workspaceSample := range sample {
-		sampleArray = append(sampleArray, workspaceSample.Sample)
+		sampleArray = append(sampleArray, workspaceSample)
 	}
 
 	marshalled, _ := json.MarshalIndent(sampleArray, "", "    ")
-	req, err := http.NewRequest("POST", wsAgentURL+"/project/batch", bytes.NewBufferString(string(marshalled)))
+	req, err := http.NewRequest("POST", c.WSAgentURL+"/project/batch", bytes.NewBufferString(string(marshalled)))
 	req.Header.Set("Content-Type", "application/json")
-
+	fmt.Printf("%v", string(marshalled))
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -262,6 +268,19 @@ func addSampleToProject(wsAgentURL string, sample []WorkspaceSample) error {
 	defer resp.Body.Close()
 
 	return nil
+}
+
+func (c *cheRunner) getNumberOfProjects() (int, error) {
+
+	projectData := getJSON(c.WSAgentURL + "/project")
+
+	var data []Sample
+	jsonErr := json.Unmarshal(projectData, &data)
+	if jsonErr != nil {
+		return -1, fmt.Errorf("Could not unmrshall data into []Sample: %v", jsonErr)
+	}
+
+	return len(data), nil
 }
 
 func (c *cheRunner) blockWorkspaceUntilStarted(workspaceID string) error {
@@ -307,11 +326,10 @@ func (c *cheRunner) getHTTPAgents(workspaceID string) (Agent, error) {
 	//Now we need to get the workspace installers and then unmarshall
 	runtimeData := getJSON(c.cheAPIEndpoint + "/workspace/" + workspaceID)
 
-	//fmt.Printf(string(runtimeData))
 	var data RuntimeStruct
 	jsonErr := json.Unmarshal(runtimeData, &data)
 	if jsonErr != nil {
-		return agents, fmt.Errorf("Could not unmrshall data into RuntimeStruct: %v", jsonErr)
+		return agents, fmt.Errorf("Could not unmarshall data into RuntimeStruct: %v", jsonErr)
 	}
 
 	for key := range data.Runtime.Machines {
@@ -331,13 +349,14 @@ func (c *cheRunner) getHTTPAgents(workspaceID string) (Agent, error) {
 	return agents, nil
 }
 
-func (c *cheRunner) startWorkspace(workspaceConfiguration StackConfigInfo, sample interface{}, stackID string) (Workspace2, error) {
-	workspaceConfig := workspaceConfiguration.Config.EnvironmentConfig
+func (c *cheRunner) startWorkspace(workspaceConfiguration interface{}, stackID string) (Workspace2, error) {
 
-	a := Post{Environments: workspaceConfig, Namespace: "che", Name: stackID + "-stack-test", DefaultEnv: "default"}
+	a := Post{Environments: workspaceConfiguration, Namespace: "che", Name: stackID + "-stack-test", DefaultEnv: "default"}
 	marshalled, _ := json.MarshalIndent(a, "", "    ")
 	re := regexp.MustCompile(",[\\n|\\s]*\"com.redhat.bayesian.lsp\"")
 	noBayesian := re.ReplaceAllString(string(marshalled), "")
+
+	fmt.Printf("%s", noBayesian)
 
 	req, err := http.NewRequest("POST", c.cheAPIEndpoint+"/workspace?start-after-create=true", bytes.NewBufferString(noBayesian))
 
@@ -388,12 +407,26 @@ func (c *cheRunner) getWorkspaceStatusByID(workspaceID string) (WorkspaceStatus,
 	}
 
 	jsonErr := json.Unmarshal([]byte(body), &data)
-
 	if jsonErr != nil {
 		return data, fmt.Errorf("Could not unmarshal contents into WorkspaceStatus: %v", jsonErr)
 	}
 
 	return data, nil
+}
+
+func (c *cheRunner) checkWorkspaceDeletion(workspaceID string) (int, error) {
+	client := http.Client{
+		Timeout: time.Second * 60,
+	}
+
+	buf2 := new(bytes.Buffer)
+	url := c.cheAPIEndpoint + "/workspace/" + workspaceID
+	req, err := http.NewRequest(http.MethodGet, url, buf2)
+	res, _ := client.Do(req)
+	if err != nil {
+		return -1, err
+	}
+	return res.StatusCode, nil
 }
 
 func (c *cheRunner) stopWorkspace(workspaceID string) error {
@@ -427,4 +460,13 @@ func (c *cheRunner) removeWorkspace(workspaceID string) error {
 	defer resp.Body.Close()
 
 	return nil
+}
+
+func (c *cheRunner) setAgentsURL(agents Agent) {
+	c.WSAgentURL = agents.wsAgentURL
+	c.ExecAgentURL = agents.execAgentURL
+}
+
+func (c *cheRunner) setWorkspaceID(workspaceID string) {
+	c.workspaceID = workspaceID
 }
