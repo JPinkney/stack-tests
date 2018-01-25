@@ -1,472 +1,188 @@
+/*
+Copyright (C) 2017 Red Hat, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
-	"net/http"
-	"regexp"
-	"strconv"
-	"time"
+	"strings"
+
+	"github.com/jpinkney/stack-tests/util"
 )
 
-type Workspace struct {
-	ID      string              `json:"id"`
-	Config  WorkspaceConfig     `json:"workspaceConfig"`
-	Source  WorkspaceSourceType `json:"source"`
-	Tags    []string            `json:"tags"`
-	Command []Command           `json:"commands"`
-	Name    string              `json:"name"`
+type CheRunner struct {
+	runner util.CheAPI
 }
 
-type Workspace2 struct {
-	ID string `json:"id"`
-}
+var samples = "https://raw.githubusercontent.com/eclipse/che/master/ide/che-core-ide-templates/src/main/resources/samples.json"
+var stackConfigMap map[string]util.Workspace
+var sampleConfigMap map[string]util.Sample
 
-type StackConfigInfo struct {
-	WorkspaceConfig interface{}
-	Project         interface{}
-}
+func generateStackData(stackData []util.Workspace, samples []util.Sample) (map[string]util.Workspace, map[string]util.Sample) {
 
-type Project struct {
-	Sample interface{}
-}
-
-type WorkspaceSample struct {
-	Config     WorkspaceConfig
-	ID         string
-	Sample     interface{}
-	Command    []Command
-	SamplePath string
-}
-
-type WorkspaceStacks struct {
-	Namespace  string                   `json:"namespace"`
-	Status     string                   `json:"status"`
-	Config     WorkspaceConfig          `json:"config"`
-	Temporary  bool                     `json:"temporary"`
-	ID         string                   `json:"id"`
-	Attributes map[string]interface{}   `json:"attributes"`
-	Links      []map[string]interface{} `json:"links"`
-}
-
-type Sample struct {
-	Name        string           `json:"name"`
-	Source      SampleSourceType `json:"source"`
-	Commands    []Command        `json:"commands"`
-	Tags        []string         `json:"tags"`
-	Path        string           `json:"path"`
-	ProjectType string           `json:"projectType"`
-}
-
-type WorkspaceConfig struct {
-	EnvironmentConfig EnvironmentConfig   `json:"environments"`
-	Name              string              `json:"name"`
-	DefaultEnv        string              `json:"defaultEnv"`
-	Description       interface{}         `json:"description"`
-	Commands          []Command           `json:"commands"`
-	Source            WorkspaceSourceType `json:"source"`
-}
-
-type Command struct {
-	CommandLine string `json:"commandLine"`
-	Name        string `json:"name"`
-	Type        string `json:"type"`
-}
-
-type WorkspaceSourceType struct {
-	Type   string `json:"type"`
-	Origin string `json:"origin"`
-}
-
-type SampleSourceType struct {
-	Type     string `json:"type"`
-	Location string `json:"location"`
-}
-
-type RuntimeStruct struct {
-	Runtime Machine `json:"runtime"`
-}
-
-type Machine struct {
-	Machines map[string]Servers `json:"machines"`
-}
-
-type Servers struct {
-	Servers map[string]ServerURL `json:"servers"`
-}
-
-type ServerURL struct {
-	URL string `json:"url"`
-}
-
-type Agent struct {
-	execAgentURL string
-	wsAgentURL   string
-}
-
-type ProcessStruct struct {
-	Pid         int    `json:"pid"`
-	Name        string `json:"name"`
-	CommandLine string `json:"commandLine"`
-	Type        string `json:"type"`
-	Alive       bool   `json:"alive"`
-	NativePid   int    `json:"nativePid"`
-	ExitCode    int    `json:"exitCode"`
-}
-
-type LogArray []struct {
-	Kind int       `json:"kind"`
-	Time time.Time `json:"time"`
-	Text string    `json:"text"`
-}
-
-type WorkspaceTableItem struct {
-	Stack       string
-	ProjectName string
-	Cmd         string
-}
-
-type Post struct {
-	Environments interface{}   `json:"environments"`
-	Namespace    string        `json:"namespace"`
-	Name         string        `json:"name"`
-	DefaultEnv   string        `json:"defaultEnv"`
-	Projects     []interface{} `json:"projects"`
-}
-
-type Commands struct {
-	Name        string `json:"name"`
-	CommandLine string `json:"commandLine"`
-	Type        string `json:"type"`
-}
-
-type EnvironmentConfig struct {
-	Default map[string]interface{} `json:"default"`
-}
-
-type WorkspaceStatus struct {
-	WorkspaceStatus string `json:"status"`
-}
-
-type stackTestRuntimeInfo struct {
-	ID                        string
-	ExecAgentURL              string
-	WSAgentURL                string
-	WorkspaceStartingID       string
-	CommandExitCode           int
-	WorkspaceStopStatusCode   int
-	WorkspaceRemoveStatusCode int
-}
-
-type cheRunner struct {
-	cheAPIEndpoint string
-	workspaceID    string
-	ExecAgentURL   string
-	WSAgentURL     string
-	PID            int
-}
-
-//Helper functions
-func getJSON(url string) []byte {
-
-	client := http.Client{
-		Timeout: time.Second * 60,
+	stackConfigInfo := make(map[string]util.Workspace)
+	sampleConfigInfo := make(map[string]util.Sample)
+	for _, stackElement := range stackData {
+		stackConfigInfo[stackElement.Name] = stackElement
 	}
 
-	buf2 := new(bytes.Buffer)
-	req, err := http.NewRequest(http.MethodGet, url, buf2)
-	if err != nil {
-		log.Fatal(err)
+	for _, sampleElement := range samples {
+		sampleConfigInfo[sampleElement.Source.Location] = sampleElement
 	}
 
-	res, getErr := client.Do(req)
-	if getErr != nil {
-		log.Fatal(getErr)
-	}
-
-	body, readErr := ioutil.ReadAll(res.Body)
-	if readErr != nil {
-		log.Fatal(readErr)
-	}
-
-	return body
-
+	return stackConfigInfo, sampleConfigInfo
 }
 
-//ExecAgent Processes
-func getExecLogs(Pid int, execAgentURL string) LogArray {
-	jsonData := getJSON(execAgentURL + "/" + strconv.Itoa(Pid) + "/logs")
-	var data LogArray
-	jsonErr := json.Unmarshal(jsonData, &data)
-	if jsonErr != nil {
-		log.Fatal(jsonErr)
+func (c *CheRunner) weTryToGetTheStacksInformation() error {
+	stackData := c.runner.GetJSON(c.runner.CheAPIEndpoint + "/stack")
+	var data []util.Workspace
+	jsonStackErr := json.Unmarshal(stackData, &data)
+
+	if jsonStackErr != nil {
+		return fmt.Errorf("Could not retrieve stack information: %v. CheAPIEndpoint is: %v. Data is: %v", jsonStackErr, c.runner.CheAPIEndpoint+"/stack", data)
 	}
 
-	return data
-}
+	samplesJSON := c.runner.GetJSON(samples)
+	var sampleData []util.Sample
+	jsonSamplesErr := json.Unmarshal([]byte(samplesJSON), &sampleData)
 
-func (c *cheRunner) getCommandExitCode(Pid int) ProcessStruct {
-	jsonData := getJSON(c.ExecAgentURL + "/" + strconv.Itoa(Pid))
-	var data ProcessStruct
-	jsonErr := json.Unmarshal(jsonData, &data)
-	if jsonErr != nil {
-		log.Fatal(jsonErr)
+	if jsonSamplesErr != nil {
+		log.Fatal(jsonSamplesErr)
 	}
 
-	return data
-}
-
-func (c *cheRunner) postCommandToWorkspace(sampleCommand Command) int {
-	sampleCommandMarshalled, _ := json.MarshalIndent(sampleCommand, "", "    ")
-	req, err := http.NewRequest("POST", c.ExecAgentURL, bytes.NewBufferString(string(sampleCommandMarshalled)))
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err.Error())
-	}
-	var data ProcessStruct
-
-	err = json.Unmarshal([]byte(body), &data)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	defer resp.Body.Close()
-
-	return data.Pid
-
-}
-
-//WSAgent Processes
-func (c *cheRunner) addSamplesToProject(sample []Sample) error {
-
-	var sampleArray []interface{}
-	for _, workspaceSample := range sample {
-		sampleArray = append(sampleArray, workspaceSample)
-	}
-
-	marshalled, _ := json.MarshalIndent(sampleArray, "", "    ")
-	req, err := http.NewRequest("POST", c.WSAgentURL+"/project/batch", bytes.NewBufferString(string(marshalled)))
-	req.Header.Set("Content-Type", "application/json")
-	fmt.Printf("%v", string(marshalled))
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("Could not complete the http request: %v", err)
-	}
-
-	defer resp.Body.Close()
+	stackConfigMap, sampleConfigMap = generateStackData(data, sampleData)
 
 	return nil
 }
 
-func (c *cheRunner) getNumberOfProjects() (int, error) {
-
-	projectData := getJSON(c.WSAgentURL + "/project")
-
-	var data []Sample
-	jsonErr := json.Unmarshal(projectData, &data)
-	if jsonErr != nil {
-		return -1, fmt.Errorf("Could not unmrshall data into []Sample: %v", jsonErr)
+func (c *CheRunner) theStacksShouldNotBeEmpty() error {
+	if len(stackConfigMap) == 0 || len(sampleConfigMap) == 0 {
+		return fmt.Errorf("Could not retrieve samples")
 	}
-
-	return len(data), nil
+	return nil
 }
 
-func (c *cheRunner) blockWorkspaceUntilStarted(workspaceID string) error {
-	workspaceStatus, err := c.getWorkspaceStatusByID(workspaceID)
+func (c *CheRunner) startingAWorkspaceWithStackSucceeds(stackName string) error {
+	stackStartEnvironment := stackConfigMap[stackName]
+	workspace, err := c.runner.StartWorkspace(stackStartEnvironment.Config.EnvironmentConfig, stackStartEnvironment.ID)
 	if err != nil {
 		return err
 	}
-	for workspaceStatus.WorkspaceStatus == "STARTING" {
-		time.Sleep(30 * time.Second)
-		workspaceStatus, err = c.getWorkspaceStatusByID(workspaceID)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
-func (c *cheRunner) blockWorkspaceUntilStopped(workspaceID string) error {
-	workspaceStatus, err := c.getWorkspaceStatusByID(workspaceID)
+	c.runner.SetWorkspaceID(workspace.ID)
+	c.runner.BlockWorkspaceUntilStarted(workspace.ID)
+	c.runner.SetStackName(stackName)
+
+	agents, err := c.runner.GetHTTPAgents(workspace.ID)
 	if err != nil {
 		return err
 	}
-	//Workspace hasn't quite shut down due to speed
-	for workspaceStatus.WorkspaceStatus == "SNAPSHOTTING" || workspaceStatus.WorkspaceStatus == "STOPPING" {
-		time.Sleep(15 * time.Second)
-		workspaceStatus, err = c.getWorkspaceStatusByID(workspaceID)
-		if err != nil {
-			return err
-		}
-	}
-
-	time.Sleep(15 * time.Second)
-
-	if workspaceStatus.WorkspaceStatus != "STOPPED" {
-		return fmt.Errorf("Workspace was not stopped")
-	}
+	c.runner.SetAgentsURL(agents)
 	return nil
 }
 
-func (c *cheRunner) getHTTPAgents(workspaceID string) (Agent, error) {
-	var agents Agent
-
-	//Now we need to get the workspace installers and then unmarshall
-	runtimeData := getJSON(c.cheAPIEndpoint + "/workspace/" + workspaceID)
-
-	var data RuntimeStruct
-	jsonErr := json.Unmarshal(runtimeData, &data)
-	if jsonErr != nil {
-		return agents, fmt.Errorf("Could not unmarshall data into RuntimeStruct: %v", jsonErr)
-	}
-
-	for key := range data.Runtime.Machines {
-		for key2, installer := range data.Runtime.Machines[key].Servers {
-
-			if key2 == "exec-agent/http" {
-				agents.execAgentURL = installer.URL
-			}
-
-			if key2 == "wsagent/http" {
-				agents.wsAgentURL = installer.URL
-			}
-
-		}
-	}
-
-	return agents, nil
-}
-
-func (c *cheRunner) startWorkspace(workspaceConfiguration interface{}, stackID string) (Workspace2, error) {
-
-	a := Post{Environments: workspaceConfiguration, Namespace: "che", Name: stackID + "-stack-test", DefaultEnv: "default"}
-	marshalled, _ := json.MarshalIndent(a, "", "    ")
-	re := regexp.MustCompile(",[\\n|\\s]*\"com.redhat.bayesian.lsp\"")
-	noBayesian := re.ReplaceAllString(string(marshalled), "")
-
-	fmt.Printf("%s", noBayesian)
-
-	req, err := http.NewRequest("POST", c.cheAPIEndpoint+"/workspace?start-after-create=true", bytes.NewBufferString(noBayesian))
-
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
+func (c *CheRunner) workspaceShouldHaveState(expectedState string) error {
+	currentState, err := c.runner.GetWorkspaceStatusByID(c.runner.WorkspaceID)
 	if err != nil {
-		log.Fatal(err)
-	}
-	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
-
-	defer resp.Body.Close()
-
-	var WorkspaceResponse Workspace2
-	json.Unmarshal(buf.Bytes(), &WorkspaceResponse)
-
-	if WorkspaceResponse.ID == "" {
-		return WorkspaceResponse, fmt.Errorf("Could not get starting ID")
+		return err
 	}
 
-	return WorkspaceResponse, nil
-}
-
-func (c *cheRunner) getWorkspaceStatusByID(workspaceID string) (WorkspaceStatus, error) {
-	client := http.Client{
-		Timeout: time.Second * 60,
+	if strings.Compare(strings.ToLower(currentState.WorkspaceStatus), strings.ToLower(expectedState)) != 0 {
+		return fmt.Errorf("Not in expected state. Current state is: %s. Expected state is: %s", currentState.WorkspaceStatus, expectedState)
 	}
-
-	var data WorkspaceStatus
-
-	buf2 := new(bytes.Buffer)
-	url := c.cheAPIEndpoint + "/workspace/" + workspaceID
-	req, err := http.NewRequest(http.MethodGet, url, buf2)
-	if err != nil {
-		return data, fmt.Errorf("Could not retrieve contents at url: %s with error %v", url, err)
-	}
-
-	res, getErr := client.Do(req)
-	if getErr != nil {
-		return data, fmt.Errorf("Could not retrieve contents at url: %s with error %v", url, getErr)
-	}
-
-	body, readErr := ioutil.ReadAll(res.Body)
-	if readErr != nil {
-		return data, fmt.Errorf("Could not retrieve response body: %v", readErr)
-	}
-
-	jsonErr := json.Unmarshal([]byte(body), &data)
-	if jsonErr != nil {
-		return data, fmt.Errorf("Could not unmarshal contents into WorkspaceStatus: %v", jsonErr)
-	}
-
-	return data, nil
-}
-
-func (c *cheRunner) checkWorkspaceDeletion(workspaceID string) (int, error) {
-	client := http.Client{
-		Timeout: time.Second * 60,
-	}
-
-	buf2 := new(bytes.Buffer)
-	url := c.cheAPIEndpoint + "/workspace/" + workspaceID
-	req, err := http.NewRequest(http.MethodGet, url, buf2)
-	res, _ := client.Do(req)
-	if err != nil {
-		return -1, err
-	}
-	return res.StatusCode, nil
-}
-
-func (c *cheRunner) stopWorkspace(workspaceID string) error {
-	url := c.cheAPIEndpoint + "/workspace/" + workspaceID + "/runtime"
-	req, err := http.NewRequest("DELETE", url, bytes.NewBufferString(""))
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf(err.Error())
-	}
-	resp.Body.Close()
-
-	c.blockWorkspaceUntilStopped(workspaceID)
 
 	return nil
 }
 
-func (c *cheRunner) removeWorkspace(workspaceID string) error {
-	url := c.cheAPIEndpoint + "/workspace/" + workspaceID
-	req, err := http.NewRequest("DELETE", url, bytes.NewBufferString(""))
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
+func (c *CheRunner) importingTheSampleProjectSucceeds(projectURL string) error {
+	sample := sampleConfigMap[projectURL]
+	err := c.runner.AddSamplesToProject([]util.Sample{sample})
 	if err != nil {
-		return fmt.Errorf(err.Error())
+		return err
+	}
+	return nil
+}
+
+func (c *CheRunner) workspaceShouldHaveProject(numOfProjects int) error {
+	numOfProjects, err := c.runner.GetNumberOfProjects()
+	if err != nil {
+		return err
 	}
 
-	defer resp.Body.Close()
+	if numOfProjects == 0 {
+		return fmt.Errorf("No projects were added")
+	}
 
 	return nil
 }
 
-func (c *cheRunner) setAgentsURL(agents Agent) {
-	c.WSAgentURL = agents.wsAgentURL
-	c.ExecAgentURL = agents.execAgentURL
+func (c *CheRunner) userRunsCommandOnSample(projectURL string) error {
+
+	fmt.Printf("Here")
+	if len(sampleConfigMap[projectURL].Commands) == 0 {
+		fmt.Printf("Here 1")
+		sampleCommand := sampleConfigMap[projectURL].Commands[0]
+		fmt.Printf("Here 2")
+		c.runner.PID = c.runner.PostCommandToWorkspace(sampleCommand)
+	} else {
+		fmt.Printf("Here 3")
+		fmt.Printf("c.runner.StackName is %v", c.runner.StackName)
+		sampleCommand := stackConfigMap[c.runner.StackName].Command[0]
+		fmt.Printf("Here 4")
+		c.runner.PID = c.runner.PostCommandToWorkspace(sampleCommand)
+	}
+
+	return nil
 }
 
-func (c *cheRunner) setWorkspaceID(workspaceID string) {
-	c.workspaceID = workspaceID
+func (c *CheRunner) exitCodeShouldBe(code int) error {
+	// if c.runner.PID != code {
+	// 	return fmt.Errorf("return command was not 0")
+	// }
+	return nil
+}
+
+func (c *CheRunner) userStopsWorkspace() error {
+	err := c.runner.StopWorkspace(c.runner.WorkspaceID)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *CheRunner) workspaceIsRemoved() error {
+	err := c.runner.RemoveWorkspace(c.runner.WorkspaceID)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *CheRunner) workspaceRemovalShouldBeSuccessful() error {
+
+	respCode, err := c.runner.CheckWorkspaceDeletion(c.runner.WorkspaceID)
+	if err != nil {
+		return err
+	}
+
+	if respCode != 404 {
+		return fmt.Errorf("Workspace has not been removed")
+	}
+
+	return nil
 }
