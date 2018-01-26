@@ -3,7 +3,6 @@ Feature: Che add-on
   Che addon starts Eclipse Che
 
   Scenario Outline: User starts workspace, imports projects, checks run commands
-    Given Minishift has state "Running"
     When we try to get the stacks information
     Then the stacks should not be empty
     When starting a workspace with stack "<stack>" succeeds
@@ -19,7 +18,4 @@ Feature: Che add-on
     
     Examples:
     | stack                 | sample                                                                   |
-    | CentOS nodejs         | https://github.com/che-samples/web-nodejs-sample.git                     |
-    | Eclipse Vert.x        | https://github.com/openshiftio-vertx-boosters/vertx-http-booster         |
     | Java CentOS           | https://github.com/che-samples/console-java-simple.git                   |
-    | Spring Boot           | https://github.com/snowdrop/spring-boot-http-booster                     |

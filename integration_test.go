@@ -43,7 +43,7 @@ func FeatureContext(s *godog.Suite) {
 
 	// steps for testing che addon
 	cheAPI := util.CheAPI{
-		CheAPIEndpoint: "http://localhost:8081/api",
+		CheAPIEndpoint: "http://che-mini-che.192.168.64.36.nip.io/api",
 	}
 
 	cheAPIRunner := &CheRunner{

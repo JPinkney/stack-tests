@@ -133,17 +133,11 @@ func (c *CheRunner) workspaceShouldHaveProject(numOfProjects int) error {
 
 func (c *CheRunner) userRunsCommandOnSample(projectURL string) error {
 
-	fmt.Printf("Here")
-	if len(sampleConfigMap[projectURL].Commands) == 0 {
-		fmt.Printf("Here 1")
+	if len(sampleConfigMap[projectURL].Commands) > 0 {
 		sampleCommand := sampleConfigMap[projectURL].Commands[0]
-		fmt.Printf("Here 2")
 		c.runner.PID = c.runner.PostCommandToWorkspace(sampleCommand)
 	} else {
-		fmt.Printf("Here 3")
-		fmt.Printf("c.runner.StackName is %v", c.runner.StackName)
 		sampleCommand := stackConfigMap[c.runner.StackName].Command[0]
-		fmt.Printf("Here 4")
 		c.runner.PID = c.runner.PostCommandToWorkspace(sampleCommand)
 	}
 

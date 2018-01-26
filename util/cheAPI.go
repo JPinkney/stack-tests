@@ -307,7 +307,7 @@ func (c *CheAPI) GetNumberOfProjects() (int, error) {
 	var data []Sample
 	jsonErr := json.Unmarshal(projectData, &data)
 	if jsonErr != nil {
-		return -1, fmt.Errorf("Could not unmrshall data into []Sample: %v", jsonErr)
+		return -1, fmt.Errorf("Could not unmarshall data into []Sample: %v", jsonErr)
 	}
 
 	return len(data), nil
@@ -359,13 +359,13 @@ func (c *CheAPI) GetHTTPAgents(workspaceID string) (Agent, error) {
 	var data RuntimeStruct
 	jsonErr := json.Unmarshal(runtimeData, &data)
 	if jsonErr != nil {
-		fmt.Printf("Could not unmarshall data into RuntimeStruct: %v", jsonErr)
+		//fmt.Printf("Could not unmarshall data into RuntimeStruct: %v", jsonErr)
 	}
 
 	var data2 Che5RuntimeStruct
 	jsonErr2 := json.Unmarshal(runtimeData, &data2)
 	if jsonErr2 != nil {
-		fmt.Printf("Could not unmarshall data into Che5Runtime: %v", jsonErr2)
+		//fmt.Printf("Could not unmarshall data into Che5Runtime: %v", jsonErr2)
 	}
 
 	for key := range data.Runtime.Machines {
@@ -384,9 +384,9 @@ func (c *CheAPI) GetHTTPAgents(workspaceID string) (Agent, error) {
 
 	for index := range data2.Runtime.Machines {
 		for _, server := range data2.Runtime.Machines[index].Runtime.Servers {
-			fmt.Printf("SERVER IS: %s", server)
+			//fmt.Printf("SERVER IS: %s", server)
 			if server.Ref == "exec-agent" {
-				agents.execAgentURL = server.URL
+				agents.execAgentURL = server.URL + "/process"
 			}
 
 			if server.Ref == "wsagent" {
@@ -451,8 +451,8 @@ func (c *CheAPI) GetWorkspaceStatusByID(workspaceID string) (WorkspaceStatus, er
 		return data, fmt.Errorf("Could not retrieve response body: %v", readErr)
 	}
 
-	fmt.Printf("Trying to understand wtf is happening")
-	fmt.Printf("%v", string(body))
+	//fmt.Printf("Trying to understand wtf is happening")
+	//fmt.Printf("%v", string(body))
 
 	jsonErr := json.Unmarshal(body, &data)
 	if jsonErr != nil {
