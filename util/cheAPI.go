@@ -133,6 +133,12 @@ type LogArray []struct {
 	Text string    `json:"text"`
 }
 
+type LogItem struct {
+	Kind int       `json:"kind"`
+	Time time.Time `json:"time"`
+	Text string    `json:"text"`
+}
+
 type Post struct {
 	Environments interface{}   `json:"environments"`
 	Namespace    string        `json:"namespace"`
@@ -213,6 +219,57 @@ func (c *CheAPI) GetExecLogs(Pid int) (LogArray, error) {
 	return execLogData, nil
 }
 
+//isLongLivedProcess takes in the Process ID of the process you would like to check if its long running
+func (c *CheAPI) isLongLivedProcess(Pid int) (bool, error) {
+	lastLogData, execErr := c.GetLastLog(Pid)
+	if execErr != nil {
+		return false, execErr
+	}
+
+	commandExitCode, err := c.GetCommandExitCode(Pid)
+	if err != nil {
+		return false, err
+	}
+
+	equalsLastLogCount := 0
+	time.Sleep(15 * time.Second)
+
+	for equalsLastLogCount != 3 && commandExitCode.ExitCode != 0 && commandExitCode.ExitCode != -1 {
+
+		newLastLogData, execErr := c.GetLastLog(Pid)
+
+		if execErr != nil {
+			return false, nil
+		}
+
+		if newLastLogData.Kind == lastLogData.Kind && newLastLogData.Text == lastLogData.Text && newLastLogData.Time == lastLogData.Time {
+			equalsLastLogCount++
+		}
+
+		time.Sleep(15 * time.Second)
+	}
+
+	if equalsLastLogCount == 3 {
+		return true, nil
+	}
+
+	return false, nil
+
+}
+
+//GetLastLog takes in the Process ID of the process you would like to get the logs for
+func (c *CheAPI) GetLastLog(Pid int) (LogItem, error) {
+	execLogData, execErr := c.GetExecLogs(Pid)
+
+	if execErr != nil {
+		return LogItem{}, execErr
+	}
+
+	newLastLogData := execLogData[len(execLogData)-1]
+
+	return newLastLogData, nil
+}
+
 //GetCommandExitCode takes in the Process ID of the process you would like to get the Process data for
 func (c *CheAPI) GetCommandExitCode(Pid int) (ProcessStruct, error) {
 	commandExitCodeJSON, _, reqErr := doRequest(http.MethodGet, c.ExecAgentURL+"/"+strconv.Itoa(Pid), "")
@@ -244,13 +301,22 @@ func (c *CheAPI) PostCommandToWorkspace(sampleCommand Command) (int, error) {
 		return -1, reqErr
 	}
 
-	var data ProcessStruct
-	unmarshalErr := json.Unmarshal(processJSON, &data)
+	var processData ProcessStruct
+	unmarshalErr := json.Unmarshal(processJSON, &processData)
 	if unmarshalErr != nil {
 		return -1, unmarshalErr
 	}
 
-	return data.Pid, nil
+	longLived, longLivedErr := c.isLongLivedProcess(processData.Pid)
+	if longLivedErr != nil {
+		return -1, longLivedErr
+	}
+
+	if longLived {
+		return 0, nil
+	}
+
+	return processData.Pid, nil
 
 }
 

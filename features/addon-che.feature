@@ -18,4 +18,4 @@ Feature: Che add-on
     
     Examples:
     | stack                 | sample                                                                   |
-    | Java CentOS           | https://github.com/che-samples/console-java-simple.git                   |
+    | Eclipse Vert.x        | https://github.com/openshiftio-vertx-boosters/vertx-http-booster         |
